@@ -11,11 +11,21 @@ Web application and discord bot to train for both Illinois and Nation wide math 
 
 #### Text input
 - Set of commands would need to include
-  * Competition
+  * Catagories
   * Event (if ICTM)
   * Timed or not timed
   * Difficulty
   * Topic
+
+  * /practiceProblem (competition, topic, difficulty)
+  * /practiceTest (amount, topic, difficulty)
+  * /test (event)
+  * /timedProblem (time, Competiton, topic, difficulty)
+  * /timedTest (time, amount, topic, difficulty)
+  * /problemAnswer (value)
+  * /testAnswers (value (Comma Seperated) )
+  * /inputParameters (competition, topic, difficulty)
+  * /leaderboard (local or global) 
 
 #### Tracking
 - Bot should be able to track correct answers in a session across discord accounts
