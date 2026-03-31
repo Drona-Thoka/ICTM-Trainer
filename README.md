@@ -16,7 +16,7 @@ Web application and discord bot to train for both Illinois and Nation wide math 
   * Timed or not timed
   * Difficulty
   * Topic
-  * 
+  # 
   * /practiceProblem (competition, topic, difficulty)
   * /practiceTest (amount, topic, difficulty)
   * /test (event)
