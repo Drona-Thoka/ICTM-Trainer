@@ -45,6 +45,18 @@ Web application and discord bot to train for both Illinois and Nation wide math 
 #### Data
 - Possibly updated problem bank
 
+<hr>
+
+### PHASE 1:
+
+#### Data
+
+##### Competitions and their Labels:
+
+<img width="1148" height="597" alt="image" src="https://github.com/user-attachments/assets/431120b7-43e1-4110-ae82-fbcb4b12591a" />
+
+
+
 
 
 
