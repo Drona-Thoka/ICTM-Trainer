@@ -21,3 +21,4 @@ async def practiceTest(ctx, amt, tpc, diff):
     pass
 
 bot.add_command(practiceProblem)
+bot.add_command(practiceTest)
