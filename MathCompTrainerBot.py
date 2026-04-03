@@ -6,18 +6,18 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix='/', intents=intents)
 
-//Example command
+#Example command
 @bot.command()
 async def test(ctx, args):
     await ctx.send(args)
-//Actual Commands
+#Actual Commands
 @bot.command()
 async def practiceProblem(ctx, comp, tpc, diff):
-    //logic
+    #logic
     pass
     
 async def practiceTest(ctx, amt, tpc, diff):
-    //logic
+    #logic
     pass
 
 bot.add_command(practiceProblem)
