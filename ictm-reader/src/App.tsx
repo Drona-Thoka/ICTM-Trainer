@@ -277,7 +277,6 @@ function App() {
 
   return (
     <div className="app-shell">
-      <SearchBar />
       <nav className="comps-nav">
         <Link to="/comp-1" className="nav-button">
           AMC

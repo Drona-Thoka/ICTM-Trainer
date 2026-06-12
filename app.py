@@ -8,27 +8,27 @@ def hello_world():
 
 @app.route("/get_amc/<diff>")
 def get_amc(diff:str):
+    return f"<p>Hello, World!</p>"
+
+@app.route("/get_ictm/<event>/<diff>")
+def get_ictm(event:str, diff:str):
     return "<p>Hello, World!</p>"
 
-@app.route("/get_ictm/<diff>")
-def get_ictm(diff:str):
-    return "<p>Hello, World!</p>"
-
-@app.route("/get_nsml/<diff>")
-def get_nsml(diff:str):
+@app.route("/get_nsml/<event>/<diff>")
+def get_nsml(event:str, diff:str):
     return "<p>Hello, World!</p>"
 
 @app.route("/get_aime/<diff>")
 def get_aime(diff:str):
-    return "<p>Hello, World!</p>"
+    return "<p>Hello, aime!</p>"
 
 @app.route("/get_arml/<diff>")
 def get_arml(diff:str):
     return "<p>Hello, World!</p>"
 
 @app.route("/amc_solutions/<problem>")
-def amc_solutions(problem:int):
-    return "<p>Hello, World!</p>"
+def amc_solutions(problem:str):
+    return f"<p>Hello, Solution!</p>"
 
 @app.route("/aime_solutions/<problem>")
 def aime_solutions(problem:int):
@@ -40,7 +40,7 @@ def nsml_solutions(problem:int):
 
 @app.route("/ictm_solutions/<problem>")
 def ictm_solutions(problem:int):
-    return "<p>Hello, World!</p>"
+    return "<p>Hello, Solution</p>"
 
 @app.route("/arml_solutions/<problem>")
 def arml_solutions(problem:int):
