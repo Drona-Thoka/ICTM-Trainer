@@ -1,25 +1,22 @@
-import discord
-import random
-from discord.ext import commands
+from flask import Flask
 
-intents = discord.Intents.default()
-intents.message_content = True
+app = Flask(__name__)
 
-bot = commands.Bot(command_prefix='/', intents=intents)
-
-#Example command
-@bot.command()
-async def test(ctx, args):
-    await ctx.send(args)
-#Actual Commands
-@bot.command()
-async def practiceProblem(ctx, comp, tpc, diff):
-    #logic
-    pass
-    
-async def practiceTest(ctx, amt, tpc, diff):
-    #logic
-    pass
-
-bot.add_command(practiceProblem)
-bot.add_command(practiceTest)
+@app.route("/")
+def hello_world():
+    return "<p>Hello, World!</p>"
+@app.route("/get_amc")
+def get_amc(diff:str):
+    return "<p>Hello, World!</p>"
+@app.route("/get_ictm")
+def get_ictm(diff:str):
+    return "<p>Hello, World!</p>"
+@app.route("/get_nsml")
+def get_nsml(diff:str):
+    return "<p>Hello, World!</p>"
+@app.route("/get_aime")
+def get_aime(diff:str):
+    return "<p>Hello, World!</p>"
+@app.route("/get_arml")
+def get_arml(diff:str):
+    return "<p>Hello, World!</p>"
