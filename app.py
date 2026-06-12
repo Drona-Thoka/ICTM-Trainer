@@ -10,13 +10,13 @@ def hello_world():
 def get_amc(diff:str):
     return "<p>Hello, World!</p>"
 
-@app.route("/get_ictm/<event>/<diff>")
-def get_ictm(event:str, diff:str):
-    return f"<h2>ICTM</h2><p>Event: {event}</p><p>Difficulty: {diff}</p>"
+@app.route("/get_ictm/<diff>")
+def get_ictm(diff:str):
+    return "<p>Hello, World!</p>"
 
-@app.route("/get_nsml/<event>/<diff>")
-def get_nsml(event:str, diff:str):
-    return f"<h2>NSML</h2><p>Event: {event}</p><p>Difficulty: {diff}</p>"
+@app.route("/get_nsml/<diff>")
+def get_nsml(diff:str):
+    return "<p>Hello, World!</p>"
 
 @app.route("/get_aime/<diff>")
 def get_aime(diff:str):

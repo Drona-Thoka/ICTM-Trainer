@@ -2,56 +2,6 @@ import { useEffect, useState } from 'react'
 import { Link, Route, Routes } from 'react-router-dom'
 import './App.css'
 
-function SearchBar() {
-  const [q, setQ] = useState('')
-  const [results, setResults] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    if (!q) {
-      setResults(null)
-      setLoading(false)
-      return
-    }
-
-    const id = window.setTimeout(async () => {
-      setLoading(true)
-      try {
-        const res = await fetch(`/search?q=${encodeURIComponent(q)}`)
-        if (!res.ok) {
-          setResults(`Search failed: ${res.status}`)
-        } else {
-          const text = await res.text()
-          setResults(text)
-        }
-      } catch (e) {
-        setResults('Search error')
-      }
-      setLoading(false)
-    }, 350)
-
-    return () => window.clearTimeout(id)
-  }, [q])
-
-  return (
-    <div className="search-bar">
-      <input
-        aria-label="search"
-        className="search-input"
-        placeholder="Search (backend `/search?q=`)"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-      />
-      <div className="search-results">
-        {loading && <div className="search-loading">Searching…</div>}
-        {!loading && results && (
-          <div className="search-content" dangerouslySetInnerHTML={{ __html: results }} />
-        )}
-      </div>
-    </div>
-  )
-}
-
 type HomeProps = {
   count: number
   setCount: React.Dispatch<React.SetStateAction<number>>
