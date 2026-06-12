@@ -17,6 +17,63 @@
   }
 }
 
+.comps-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  padding: 24px 16px;
+  background: rgba(255, 255, 255, 0.92);
+  border-bottom: 1px solid var(--border);
+}
+
+.nav-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 120px;
+  padding: 12px 18px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  text-decoration: none;
+  border: 1px solid transparent;
+  font-weight: 600;
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+
+.nav-button:hover,
+.nav-button:focus-visible {
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow);
+  transform: translateY(-1px);
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#comp-page {
+  padding: 48px 24px;
+  text-align: center;
+}
+
+#comp-page h1 {
+  margin-bottom: 16px;
+}
+
+.button-row {
+  margin-top: 24px;
+}
+
+@media (max-width: 1024px) {
+  .comps-nav {
+    padding: 16px 12px;
+  }
+}
+
 .hero {
   position: relative;
 
