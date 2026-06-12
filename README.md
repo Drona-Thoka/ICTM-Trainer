@@ -3,6 +3,9 @@ Web application and discord bot to train for both Illinois and Nation wide math 
 
 ### Project Architecture (PHASE 1 - Discord Bot):
 
+### Prompt for frontend
+create 5 new pages tro the frontend with the homepage including 5 buttons each to a different page add this to the ictm-reader frontend
+
 #### Data Collection:
 - Problems image files are avalible, but need to be smartly segmented. An LLM method may be needed.
 - If our segmentation method is good labels should be avalible, otherwise we need to label the images.
