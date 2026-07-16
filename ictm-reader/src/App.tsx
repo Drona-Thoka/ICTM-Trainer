@@ -22,7 +22,7 @@ function Home({ count, setCount }: HomeProps) {
   return (
     <section id="home-page" className="home-hero">
       <div className="hero-card">
-        <h1>Learn AMC, AIME, NSML, ICTM, and ARML.</h1>
+        <h1>Learn AMC, AIME, NSML, ICTM, and ARML Tryouts.</h1>
         <p className="hero-copy">
           Browse contest content by difficulty, explore event-based practice, and jump into the
           competition pages below.
