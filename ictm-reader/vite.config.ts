@@ -6,12 +6,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/get_amc10': 'http://127.0.0.1:5000',
-      '/get_amc12': 'http://127.0.0.1:5000',
-      '/get_aime': 'http://127.0.0.1:5000',
-      '/get_nsml': 'http://127.0.0.1:5000',
-      '/get_ictm': 'http://127.0.0.1:5000',
-      '/get_arml': 'http://127.0.0.1:5000',
+      // Flask JSON API — see app.py. Everything under /api proxies to the backend.
+      '/api': 'http://127.0.0.1:5000',
     },
   },
 })
