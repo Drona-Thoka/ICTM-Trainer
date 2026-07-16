@@ -9,16 +9,26 @@ type HomeProps = {
 
 function Home({ count, setCount }: HomeProps) {
   return (
-    <section id="home-page">
-      <h1>Home</h1>
-      <p>Choose one of the competition pages below.</p>
-      <button
-        type="button"
-        className="counter"
-        onClick={() => setCount((count) => count + 1)}
-      >
-        Count is {count}
-      </button>
+    <section id="home-page" className="home-hero">
+      <div className="hero-card">
+        <h1>Train smarter for AMC, AIME, NSML, ICTM, and ARML.</h1>
+        <p className="hero-copy">
+          Browse contest content by difficulty, explore event-based practice, and jump into the
+          competition pages below.
+        </p>
+        <div className="hero-actions">
+          <button
+            type="button"
+            className="counter"
+            onClick={() => setCount((count) => count + 1)}
+          >
+            Count: {count}
+          </button>
+          <Link to="/comp-1" className="nav-button primary">
+            Start with AMC
+          </Link>
+        </div>
+      </div>
     </section>
   )
 }
@@ -272,15 +282,39 @@ function IctmPage({ title, description }: { title: string; description: string }
   )
 }
 
+function SearchBar() {
+  return (
+    <div className="search-bar">
+      <div className="search-bar-inner">
+        <input
+          type="search"
+          placeholder="Search competitions..."
+          aria-label="Search competitions"
+          className="search-input"
+        />
+        <button type="button" className="search-button">
+          Search
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function App() {
   const [count, setCount] = useState(0)
 
   return (
     <div className="app-shell">
-      <SearchBar />
+      <header className="app-header">
+        <div className="brand-block">
+          <div className="brand">ICTM Trainer</div>
+          <div className="brand-subtitle">Math comp practice hub</div>
+        </div>
+        <SearchBar />
+      </header>
       <nav className="comps-nav">
         <Link to="/comp-1" className="nav-button">
-          AMC
+          AMC 10/12
         </Link>
         <Link to="/comp-2" className="nav-button">
           AIME
@@ -303,7 +337,7 @@ function App() {
           element={
             <CompPage
               title="AMC"
-              description="A nationwide exam series that challenges students with proof-free problems in algebra, geometry, number theory, and combinatorics"
+              description="A nationwide exam series that challenges students with proof-free problems in algebra, geometry, number theory, and combinatorics. Getting a good score on this test is the gateway to AIME and other prestigious competitions."
               endpoint="get_amc"
             />
           }
@@ -323,10 +357,10 @@ function App() {
           element={
             <NsmlPage
               title="NSML"
-              description="A nationwide league that combines monthly individual contests with cumulative scoring and team participation"
+              description="A Regional math competition for Illinois students, featuring a mix of individual and team-based problem solving across multiple topics"
             />
           }
-        />
+        /> 
         <Route
           path="/comp-4"
           element={
