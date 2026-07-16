@@ -55,6 +55,47 @@ type CompProps = {
 const topicOptions = ['All topics', 'Algebra', 'Geometry', 'Number Theory', 'Combinatorics', 'Precalculus', 'Advanced Math']
 const gradeOptions = ['9', '10', '11', '12']
 
+const nsmlTopicsByGrade: Record<string, string[]> = {
+  '9': [
+    'Number Bases',
+    'Counting Basics & Simple Probability',
+    'Basic Statistics',
+    'Systems of Equations & Quadratics',
+  ],
+  '10': [
+    'Logic, Sets & Venn Diagrams',
+    'Geometric Probability',
+    'Circles',
+    'Surface Area & Volume (3D)',
+  ],
+  '11': [
+    'Modular Arithmetic',
+    'Probability',
+    'Geometric Transformations (Matrices)',
+    'Theory of Polynomials',
+  ],
+  '12': [
+    'Diophantine Equations',
+    'Probability',
+    'Vectors',
+    'Parametric Equations',
+  ],
+}
+
+const ictmTopicsByEvent: Record<string, string[]> = {
+  'Algebra I': ['All topics', 'Algebra Basics', 'Linear Equations'],
+  'Geometry': ['All topics', 'Geometry Basics', 'Triangles'],
+  'Algebra II': ['All topics', 'Algebra II', 'Quadratics'],
+  'Pre-Calculus': ['All topics', 'Pre-Calculus Review', 'Trigonometry'],
+  'Freshman-Sophomore 8 Person Team': ['All topics', 'Team Strategy', 'Relay Practice'],
+  'Junior-Senior 8 Person Team': ['All topics', 'Advanced Team Strategy', 'Team Logic'],
+  'Calculator Team': ['All topics', 'Calculator Techniques', 'Scientific Notation'],
+  'Freshman-Sophomore 2 Person Team': ['All topics', 'Fast Thinking', 'Short Answer Strategy'],
+  'Junior-Senior 2 Person Team': ['All topics', 'Advanced Fast Thinking', 'Tie-Breaker Strategy'],
+}
+
+/* Event lists removed — NSML no longer exposes per-event selection; ICTM uses default events */
+
 type QuestionDisplayProps = {
   title: string
   subtitle?: string
@@ -179,16 +220,17 @@ function CompPage({ title, description, endpoint }: CompProps) {
 }
 
 function NsmlPage({ title, description }: { title: string; description: string }) {
-  const difficulties = ['Beginner', 'Easy', 'Medium', 'Hard', 'Expert']
+  const difficulties = ['Q1', 'Q2', 'Q3', 'Q4', 'Q5']
   const [selectedDiff, setSelectedDiff] = useState<string | null>(null)
   const [selectedTopic, setSelectedTopic] = useState('All topics')
   const [selectedGrade, setSelectedGrade] = useState('10')
+  const nsmlTopicOptions = nsmlTopicsByGrade[selectedGrade] ?? topicOptions
   const [content, setContent] = useState<string>('')
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // NSML uses a single combined 'all' event; fetch when difficulty changes
+    // Fetch when difficulty is selected (NSML has no per-event selection)
     if (!selectedDiff) {
       setContent('')
       setStatus('idle')
@@ -218,6 +260,8 @@ function NsmlPage({ title, description }: { title: string; description: string }
     fetchData()
   }, [selectedDiff, selectedTopic, selectedGrade])
 
+  /* NSML no longer exposes per-grade events in the UI */
+
   return (
     <section id="comp-page">
       <h1>{title}</h1>
@@ -235,24 +279,23 @@ function NsmlPage({ title, description }: { title: string; description: string }
           </button>
         ))}
       </div>
-
       <div className="control-row">
         <label className="control-group">
-          <span>Topic</span>
-          <select value={selectedTopic} onChange={(event) => setSelectedTopic(event.target.value)}>
-            {topicOptions.map((topic) => (
-              <option key={topic} value={topic}>
-                {topic}
+          <span>Grade</span>
+          <select value={selectedGrade} onChange={(event) => { setSelectedGrade(event.target.value); setSelectedTopic(nsmlTopicsByGrade[event.target.value]?.[0] ?? 'All topics') }}>
+            {gradeOptions.map((grade) => (
+              <option key={grade} value={grade}>
+                Grade {grade}
               </option>
             ))}
           </select>
         </label>
         <label className="control-group">
-          <span>Grade</span>
-          <select value={selectedGrade} onChange={(event) => setSelectedGrade(event.target.value)}>
-            {gradeOptions.map((grade) => (
-              <option key={grade} value={grade}>
-                Grade {grade}
+          <span>Topic</span>
+          <select value={selectedTopic} onChange={(event) => setSelectedTopic(event.target.value)}>
+            {nsmlTopicOptions.map((topic) => (
+              <option key={topic} value={topic}>
+                {topic}
               </option>
             ))}
           </select>
@@ -261,7 +304,7 @@ function NsmlPage({ title, description }: { title: string; description: string }
 
       <QuestionDisplay
         title={`${title} question`}
-        subtitle={`${selectedDiff ?? 'Select a difficulty'} • ${selectedTopic} • Grade ${selectedGrade}`}
+        subtitle={`${selectedDiff ?? 'Select a Question'} • ${selectedTopic} • Grade ${selectedGrade}`}
         content={content}
         status={status}
         error={error}
@@ -278,11 +321,23 @@ function NsmlPage({ title, description }: { title: string; description: string }
 }
 
 function IctmPage({ title, description }: { title: string; description: string }) {
-  const events = Array.from({ length: 9 }, (_, i) => `Event ${i + 1}`)
+  const events = [
+    'Algebra I',
+    'Geometry',
+    'Algebra II',
+    'Pre-Calculus',
+    'Freshman-Sophomore 8 Person Team',
+    'Junior-Senior 8 Person Team',
+    'Calculator Team',
+    'Freshman-Sophomore 2 Person Team',
+    'Junior-Senior 2 Person Team',
+  ]
   const [selected, setSelected] = useState<string | null>(null)
   const difficulties = ['Easy', 'Medium', 'Hard']
   const [selectedDiff, setSelectedDiff] = useState<string | null>(null)
   const [selectedTopic, setSelectedTopic] = useState('All topics')
+  const ictmEventOptions = events
+  const ictmTopicOptions = (selected && ictmTopicsByEvent[selected]) ? ictmTopicsByEvent[selected] : topicOptions
   const [content, setContent] = useState<string>('')
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
@@ -338,25 +393,20 @@ function IctmPage({ title, description }: { title: string; description: string }
       <div className="control-row">
         <label className="control-group">
           <span>Event</span>
-          <select
-            value={selected ?? ''}
-            onChange={(event) => setSelected(event.target.value || null)}
-          >
+          <select value={selected ?? ''} onChange={(event) => { const val = event.target.value || null; setSelected(val); setSelectedTopic(val ? (ictmTopicsByEvent[val]?.[0] ?? 'All topics') : 'All topics') }}>
             <option value="">Select an event</option>
-            {events.map((e) => (
+            {ictmEventOptions.map((e) => (
               <option key={e} value={e}>
                 {e}
               </option>
             ))}
           </select>
         </label>
-      </div>
 
-      <div className="control-row">
         <label className="control-group">
           <span>Topic</span>
           <select value={selectedTopic} onChange={(event) => setSelectedTopic(event.target.value)}>
-            {topicOptions.map((topic) => (
+            {ictmTopicOptions.map((topic) => (
               <option key={topic} value={topic}>
                 {topic}
               </option>
@@ -383,23 +433,7 @@ function IctmPage({ title, description }: { title: string; description: string }
   )
 }
 
-function SearchBar() {
-  return (
-    <div className="search-bar">
-      <div className="search-bar-inner">
-        <input
-          type="search"
-          placeholder="Search competitions..."
-          aria-label="Search competitions"
-          className="search-input"
-        />
-        <button type="button" className="search-button">
-          Search
-        </button>
-      </div>
-    </div>
-  )
-}
+// SearchBar removed — header no longer shows a search input
 
 function App() {
   const [count, setCount] = useState(0)
@@ -411,7 +445,7 @@ function App() {
           <div className="brand">ICTM Trainer</div>
           <div className="brand-subtitle">Math competition practice hub</div>
         </div>
-        <SearchBar />
+        
       </header>
       <nav className="comps-nav">
         <Link to="/comp-amc10" className="nav-button">
@@ -430,7 +464,7 @@ function App() {
           ICTM
         </Link>
         <Link to="/comp-arml" className="nav-button">
-          ARML
+          ARML Tryouts
         </Link>
       </nav>
 
@@ -441,7 +475,7 @@ function App() {
           element={
             <CompPage
               title="AMC 10"
-              description="A nationwide exam series for students in grades 10 and below, focusing on proof-free problems in algebra, geometry, number theory, and combinatorics."
+              description="The AMC 10 is a 25‑question, 75‑minute multiple‑choice national exam for 9th and 10th graders covering algebra, geometry, number theory, and combinatorics, with top performers qualifying for the AIME."
               endpoint="get_amc10"
             />
           }
@@ -451,7 +485,7 @@ function App() {
           element={
             <CompPage
               title="AMC 12"
-              description="A nationwide exam series for students in grades 12 and below, featuring proof-free problems in algebra, geometry, number theory, and combinatorics."
+              description="The AMC 12 follows the same format as the AMC 10 but includes pre‑calculus topics such as trigonometry and logarithms, making it the primary qualifying route for upperclassmen to reach the AIME."
               endpoint="get_amc12"
             />
           }
@@ -461,7 +495,7 @@ function App() {
           element={
             <CompPage
               title="AIME"
-              description="An invitation-only contest for top AMC scorers featuring challenging integer-answer problems requiring deeper mathematical insight"
+              description="The AIME is an invitation‑only, 15‑problem, 3‑hour exam that requires integer answers from 0 to 999 and serves as the crucial bridge from the AMC to the USAJMO and USAMO."
               endpoint="get_aime"
             />
           }
@@ -471,7 +505,7 @@ function App() {
           element={
             <NsmlPage
               title="NSML"
-              description="A Regional math competition for Illinois students, featuring a mix of individual and team-based problem solving across multiple topics"
+              description="The North Suburban Math League is an Illinois‑based series of team and individual meets held throughout the school year that fosters collaborative problem‑solving across a wide range of mathematical topics."
             />
           }
         /> 
@@ -480,7 +514,7 @@ function App() {
           element={
             <IctmPage
               title="ICTM"
-              description="A state-level competition where Illinois students compete individually and as teams across multiple mathematics topics"
+              description="The Illinois Council of Teachers of Mathematics runs a large state‑wide competition with separate Frosh/Soph and Junior/Senior brackets, featuring both individual tests and team challenges to recognize excellence at every high‑school level."
             />
           }
         />
@@ -488,8 +522,8 @@ function App() {
           path="/comp-arml"
           element={
             <CompPage
-              title="ARML"
-              description="A prestigious national team-based competition where top students collaborate on challenging individual and relay-style mathematics problems"
+              title="ARML Tryouts"
+              description="The ARML tryouts are a rigorous qualifying exam that selects top students for the national ARML team, testing advanced problem‑solving through a mix of individual and team‑based rounds across algebra, geometry, number theory, and combinatorics."
               endpoint="get_arml"
             />
           }
