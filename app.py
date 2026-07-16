@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from flask import Flask, g, abort
+from flask import Flask, g, abort, request
 
 app = Flask(__name__)
 DB_PATH = os.path.join(os.path.dirname(__file__), 'trainer.db')
@@ -70,22 +70,58 @@ def init_db():
     db.close()
 
 
-def query_content(comp: str, diff: str, event: str | None = None) -> str:
-    db = get_db()
-    if event is None:
-        row = db.execute(
-            'SELECT html FROM content WHERE comp = ? AND diff = ? AND event IS NULL',
-            (comp, diff),
-        ).fetchone()
-    else:
-        row = db.execute(
-            'SELECT html FROM content WHERE comp = ? AND event = ? AND diff = ?',
-            (comp, event, diff),
-        ).fetchone()
+def build_content(comp: str, diff: str, event: str | None = None, topic: str | None = None, grade: str | None = None) -> str:
+    topic_label = topic if topic and topic != 'All topics' else 'all topics'
+    grade_label = grade if grade else 'all grades'
+    event_label = f' for {event}' if event else ''
 
-    if row is None:
-        abort(404, description='No content found for the requested competition and difficulty.')
-    return row['html']
+    if comp == 'amc10':
+        return (
+            f'<h2>AMC 10 {diff.title()}</h2>'
+            f'<p>Sample AMC 10 {diff.lower()} problems and practice hints.</p>'
+            f'<p>Selected topic: {topic_label}. Grade focus: {grade_label}.</p>'
+        )
+
+    if comp == 'amc12':
+        return (
+            f'<h2>AMC 12 {diff.title()}</h2>'
+            f'<p>Sample AMC 12 {diff.lower()} problems and practice hints.</p>'
+            f'<p>Selected topic: {topic_label}. Grade focus: {grade_label}.</p>'
+        )
+
+    if comp == 'aime':
+        return (
+            f'<h2>AIME {diff.title()}</h2>'
+            f'<p>Sample AIME {diff.lower()} problems and practice hints.</p>'
+            f'<p>Selected topic: {topic_label}. Grade focus: {grade_label}.</p>'
+        )
+
+    if comp == 'arml':
+        return (
+            f'<h2>ARML {diff.title()}</h2>'
+            f'<p>Sample ARML {diff.lower()} problems and practice hints.</p>'
+            f'<p>Selected topic: {topic_label}. Grade focus: {grade_label}.</p>'
+        )
+
+    if comp == 'nsml':
+        return (
+            f'<h2>NSML {event or "selected event"} {diff}</h2>'
+            f'<p>Sample NSML practice content for {event_label or "the selected event"}.</p>'
+            f'<p>Selected topic: {topic_label}. Grade focus: {grade_label}.</p>'
+        )
+
+    if comp == 'ictm':
+        return (
+            f'<h2>ICTM {event or "selected event"} {diff}</h2>'
+            f'<p>Sample ICTM practice content for {event_label or "the selected event"}.</p>'
+            f'<p>Selected topic: {topic_label}. Grade focus: {grade_label}.</p>'
+        )
+
+    return '<p>No content available.</p>'
+
+
+def query_content(comp: str, diff: str, event: str | None = None, topic: str | None = None, grade: str | None = None) -> str:
+    return build_content(comp, diff, event=event, topic=topic, grade=grade)
 
 
 @app.route('/')
@@ -93,29 +129,34 @@ def hello_world():
     return '<p>Hello, World!</p>'
 
 
-@app.route('/get_amc/<diff>')
-def get_amc(diff: str):
-    return query_content('amc', diff)
+@app.route('/get_amc10/<diff>')
+def get_amc10(diff: str):
+    return query_content('amc10', diff, topic=request.args.get('topic'), grade=request.args.get('grade'))
+
+
+@app.route('/get_amc12/<diff>')
+def get_amc12(diff: str):
+    return query_content('amc12', diff, topic=request.args.get('topic'), grade=request.args.get('grade'))
 
 
 @app.route('/get_aime/<diff>')
 def get_aime(diff: str):
-    return query_content('aime', diff)
+    return query_content('aime', diff, topic=request.args.get('topic'), grade=request.args.get('grade'))
 
 
 @app.route('/get_arml/<diff>')
 def get_arml(diff: str):
-    return query_content('arml', diff)
+    return query_content('arml', diff, topic=request.args.get('topic'), grade=request.args.get('grade'))
 
 
 @app.route('/get_nsml/<event>/<diff>')
 def get_nsml(event: str, diff: str):
-    return query_content('nsml', diff, event)
+    return query_content('nsml', diff, event=event, topic=request.args.get('topic'), grade=request.args.get('grade'))
 
 
 @app.route('/get_ictm/<event>/<diff>')
 def get_ictm(event: str, diff: str):
-    return query_content('ictm', diff, event)
+    return query_content('ictm', diff, event=event, topic=request.args.get('topic'), grade=request.args.get('grade'))
 
 
 @app.route('/amc_solutions/<int:problem>')

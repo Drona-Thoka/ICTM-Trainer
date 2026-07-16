@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, Route, Routes } from 'react-router-dom'
 import './App.css'
 
@@ -8,10 +8,21 @@ type HomeProps = {
 }
 
 function Home({ count, setCount }: HomeProps) {
+  const countRef = useRef(count)
+
+  useEffect(() => {
+    countRef.current = count
+  }, [count])
+
+  const increment = () => {
+    countRef.current += 1
+    setCount(countRef.current)
+  }
+
   return (
     <section id="home-page" className="home-hero">
       <div className="hero-card">
-        <h1>Train smarter for AMC, AIME, NSML, ICTM, and ARML.</h1>
+        <h1>Learn AMC, AIME, NSML, ICTM, and ARML.</h1>
         <p className="hero-copy">
           Browse contest content by difficulty, explore event-based practice, and jump into the
           competition pages below.
@@ -20,12 +31,14 @@ function Home({ count, setCount }: HomeProps) {
           <button
             type="button"
             className="counter"
-            onClick={() => setCount((count) => count + 1)}
+            onClick={increment}
+            onMouseDown={(event) => event.preventDefault()}
+            onContextMenu={(event) => event.preventDefault()}
           >
             Count: {count}
           </button>
-          <Link to="/comp-1" className="nav-button primary">
-            Start with AMC
+          <Link to="/comp-amc10" className="nav-button primary">
+            Start with AMC 10
           </Link>
         </div>
       </div>
@@ -39,12 +52,55 @@ type CompProps = {
   endpoint: string
 }
 
+const topicOptions = ['All topics', 'Algebra', 'Geometry', 'Number Theory', 'Combinatorics', 'Precalculus', 'Advanced Math']
+const gradeOptions = ['9', '10', '11', '12']
+
+type QuestionDisplayProps = {
+  title: string
+  subtitle?: string
+  content: string
+  status: 'idle' | 'loading' | 'error'
+  error: string | null
+  emptyMessage?: string
+}
+
 const difficulties = ['easy', 'medium', 'hard'] as const
 
 type Difficulty = (typeof difficulties)[number]
 
+function QuestionDisplay({
+  title,
+  subtitle,
+  content,
+  status,
+  error,
+  emptyMessage,
+}: QuestionDisplayProps) {
+  return (
+    <div className="question-card">
+      <div className="question-card-header">
+        <div>
+          <p className="question-eyebrow">Question area</p>
+          <h2>{title}</h2>
+        </div>
+        {subtitle ? <span className="question-meta">{subtitle}</span> : null}
+      </div>
+
+      <div className="question-card-body">
+        {status === 'loading' && <p className="question-placeholder">Loading question...</p>}
+        {status === 'error' && <p className="error">Failed to load: {error}</p>}
+        {status === 'idle' && !content && (
+          <p className="question-placeholder">{emptyMessage ?? 'Choose a difficulty or event to view the question.'}</p>
+        )}
+        {status === 'idle' && content && <div dangerouslySetInnerHTML={{ __html: content }} />}
+      </div>
+    </div>
+  )
+}
+
 function CompPage({ title, description, endpoint }: CompProps) {
   const [diff, setDiff] = useState<Difficulty>('easy')
+  const [selectedTopic, setSelectedTopic] = useState('All topics')
   const [content, setContent] = useState<string>('')
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
@@ -56,7 +112,8 @@ function CompPage({ title, description, endpoint }: CompProps) {
 
     const fetchData = async () => {
       try {
-        const response = await fetch(`/${endpoint}/${diff}`)
+        const topicQuery = selectedTopic === 'All topics' ? '' : `?topic=${encodeURIComponent(selectedTopic)}`
+        const response = await fetch(`/${endpoint}/${diff}${topicQuery}`)
         if (!response.ok) {
           throw new Error(`${response.status} ${response.statusText}`)
         }
@@ -70,7 +127,7 @@ function CompPage({ title, description, endpoint }: CompProps) {
     }
 
     fetchData()
-  }, [endpoint, diff])
+  }, [endpoint, diff, selectedTopic])
 
   return (
     <section id="comp-page">
@@ -90,13 +147,27 @@ function CompPage({ title, description, endpoint }: CompProps) {
         ))}
       </div>
 
-      <div className="result-box">
-        {status === 'loading' && <p>Loading {title} ({diff})...</p>}
-        {status === 'error' && <p className="error">Failed to load: {error}</p>}
-        {status === 'idle' && !error && (
-          <div dangerouslySetInnerHTML={{ __html: content || '<p>No response yet.</p>' }} />
-        )}
+      <div className="control-row">
+        <label className="control-group">
+          <span>Topic</span>
+          <select value={selectedTopic} onChange={(event) => setSelectedTopic(event.target.value)}>
+            {topicOptions.map((topic) => (
+              <option key={topic} value={topic}>
+                {topic}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
+
+      <QuestionDisplay
+        title={`${title} question`}
+        subtitle={`${diff} difficulty • ${selectedTopic}`}
+        content={content}
+        status={status}
+        error={error}
+        emptyMessage={`Choose a difficulty to view the ${title.toLowerCase()} question.`}
+      />
 
       <div className="button-row">
         <Link to="/" className="nav-button">
@@ -108,17 +179,17 @@ function CompPage({ title, description, endpoint }: CompProps) {
 }
 
 function NsmlPage({ title, description }: { title: string; description: string }) {
-  const events = ['Event A', 'Event B', 'Event C', 'Event D']
-  const [selected, setSelected] = useState<string | null>(null)
   const difficulties = ['Beginner', 'Easy', 'Medium', 'Hard', 'Expert']
   const [selectedDiff, setSelectedDiff] = useState<string | null>(null)
+  const [selectedTopic, setSelectedTopic] = useState('All topics')
+  const [selectedGrade, setSelectedGrade] = useState('10')
   const [content, setContent] = useState<string>('')
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // only fetch when both an event and difficulty are selected
-    if (!selected || !selectedDiff) {
+    // NSML uses a single combined 'all' event; fetch when difficulty changes
+    if (!selectedDiff) {
       setContent('')
       setStatus('idle')
       setError(null)
@@ -131,7 +202,8 @@ function NsmlPage({ title, description }: { title: string; description: string }
 
     const fetchData = async () => {
       try {
-        const url = `/get_nsml/${encodeURIComponent(selected)}/${encodeURIComponent(selectedDiff)}`
+        const topicQuery = selectedTopic === 'All topics' ? '' : `&topic=${encodeURIComponent(selectedTopic)}`
+        const url = `/get_nsml/${encodeURIComponent('all')}/${encodeURIComponent(selectedDiff)}?grade=${encodeURIComponent(selectedGrade)}${topicQuery}`
         const res = await fetch(url)
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
         const text = await res.text()
@@ -144,7 +216,7 @@ function NsmlPage({ title, description }: { title: string; description: string }
     }
 
     fetchData()
-  }, [selected, selectedDiff])
+  }, [selectedDiff, selectedTopic, selectedGrade])
 
   return (
     <section id="comp-page">
@@ -164,27 +236,37 @@ function NsmlPage({ title, description }: { title: string; description: string }
         ))}
       </div>
 
-      <div className="event-grid">
-        {events.map((e) => (
-          <button
-            key={e}
-            type="button"
-            className={`event-button ${selected === e ? 'selected' : ''}`}
-            onClick={() => setSelected(e)}
-          >
-            {e}
-          </button>
-        ))}
+      <div className="control-row">
+        <label className="control-group">
+          <span>Topic</span>
+          <select value={selectedTopic} onChange={(event) => setSelectedTopic(event.target.value)}>
+            {topicOptions.map((topic) => (
+              <option key={topic} value={topic}>
+                {topic}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="control-group">
+          <span>Grade</span>
+          <select value={selectedGrade} onChange={(event) => setSelectedGrade(event.target.value)}>
+            {gradeOptions.map((grade) => (
+              <option key={grade} value={grade}>
+                Grade {grade}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
-      <div className="result-box">
-        {status === 'loading' && <p>Loading {selected} — {selectedDiff}...</p>}
-        {status === 'error' && <p className="error">Failed to load: {error}</p>}
-        {status === 'idle' && content && (
-          <div dangerouslySetInnerHTML={{ __html: content }} />
-        )}
-        {status === 'idle' && !content && <p>No event selected.</p>}
-      </div>
+      <QuestionDisplay
+        title={`${title} question`}
+        subtitle={`${selectedDiff ?? 'Select a difficulty'} • ${selectedTopic} • Grade ${selectedGrade}`}
+        content={content}
+        status={status}
+        error={error}
+        emptyMessage="Choose a difficulty to view a question."
+      />
 
       <div className="button-row">
         <Link to="/" className="nav-button">
@@ -200,6 +282,7 @@ function IctmPage({ title, description }: { title: string; description: string }
   const [selected, setSelected] = useState<string | null>(null)
   const difficulties = ['Easy', 'Medium', 'Hard']
   const [selectedDiff, setSelectedDiff] = useState<string | null>(null)
+  const [selectedTopic, setSelectedTopic] = useState('All topics')
   const [content, setContent] = useState<string>('')
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
@@ -218,7 +301,8 @@ function IctmPage({ title, description }: { title: string; description: string }
 
     const fetchData = async () => {
       try {
-        const url = `/get_ictm/${encodeURIComponent(selected)}/${encodeURIComponent(selectedDiff)}`
+        const topicQuery = selectedTopic === 'All topics' ? '' : `?topic=${encodeURIComponent(selectedTopic)}`
+        const url = `/get_ictm/${encodeURIComponent(selected)}/${encodeURIComponent(selectedDiff)}${topicQuery}`
         const res = await fetch(url)
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
         const text = await res.text()
@@ -231,7 +315,7 @@ function IctmPage({ title, description }: { title: string; description: string }
     }
 
     fetchData()
-  }, [selected, selectedDiff])
+  }, [selected, selectedDiff, selectedTopic])
 
   return (
     <section id="comp-page">
@@ -251,27 +335,44 @@ function IctmPage({ title, description }: { title: string; description: string }
         ))}
       </div>
 
-      <div className="event-grid">
-        {events.map((e) => (
-          <button
-            key={e}
-            type="button"
-            className={`event-button ${selected === e ? 'selected' : ''}`}
-            onClick={() => setSelected(e)}
+      <div className="control-row">
+        <label className="control-group">
+          <span>Event</span>
+          <select
+            value={selected ?? ''}
+            onChange={(event) => setSelected(event.target.value || null)}
           >
-            {e}
-          </button>
-        ))}
+            <option value="">Select an event</option>
+            {events.map((e) => (
+              <option key={e} value={e}>
+                {e}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
-      <div className="result-box">
-        {status === 'loading' && <p>Loading {selected} — {selectedDiff}...</p>}
-        {status === 'error' && <p className="error">Failed to load: {error}</p>}
-        {status === 'idle' && content && (
-          <div dangerouslySetInnerHTML={{ __html: content }} />
-        )}
-        {status === 'idle' && !content && <p>No event selected.</p>}
+      <div className="control-row">
+        <label className="control-group">
+          <span>Topic</span>
+          <select value={selectedTopic} onChange={(event) => setSelectedTopic(event.target.value)}>
+            {topicOptions.map((topic) => (
+              <option key={topic} value={topic}>
+                {topic}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
+
+      <QuestionDisplay
+        title={`${title} question`}
+        subtitle={`${selected ?? 'Select an event'} • ${selectedDiff ?? 'Select a difficulty'} • ${selectedTopic}`}
+        content={content}
+        status={status}
+        error={error}
+        emptyMessage="Choose an event and difficulty to view a question."
+      />
 
       <div className="button-row">
         <Link to="/" className="nav-button">
@@ -308,24 +409,27 @@ function App() {
       <header className="app-header">
         <div className="brand-block">
           <div className="brand">ICTM Trainer</div>
-          <div className="brand-subtitle">Math comp practice hub</div>
+          <div className="brand-subtitle">Math competition practice hub</div>
         </div>
         <SearchBar />
       </header>
       <nav className="comps-nav">
-        <Link to="/comp-1" className="nav-button">
-          AMC 10/12
+        <Link to="/comp-amc10" className="nav-button">
+          AMC 10
         </Link>
-        <Link to="/comp-2" className="nav-button">
+        <Link to="/comp-amc12" className="nav-button">
+          AMC 12
+        </Link>
+        <Link to="/comp-aime" className="nav-button">
           AIME
         </Link>
-        <Link to="/comp-3" className="nav-button">
+        <Link to="/comp-nsml" className="nav-button">
           NSML
         </Link>
-        <Link to="/comp-4" className="nav-button">
+        <Link to="/comp-ictm" className="nav-button">
           ICTM
         </Link>
-        <Link to="/comp-5" className="nav-button">
+        <Link to="/comp-arml" className="nav-button">
           ARML
         </Link>
       </nav>
@@ -333,17 +437,27 @@ function App() {
       <Routes>
         <Route path="/" element={<Home count={count} setCount={setCount} />} />
         <Route
-          path="/comp-1"
+          path="/comp-amc10"
           element={
             <CompPage
-              title="AMC"
-              description="A nationwide exam series that challenges students with proof-free problems in algebra, geometry, number theory, and combinatorics. Getting a good score on this test is the gateway to AIME and other prestigious competitions."
-              endpoint="get_amc"
+              title="AMC 10"
+              description="A nationwide exam series for students in grades 10 and below, focusing on proof-free problems in algebra, geometry, number theory, and combinatorics."
+              endpoint="get_amc10"
             />
           }
         />
         <Route
-          path="/comp-2"
+          path="/comp-amc12"
+          element={
+            <CompPage
+              title="AMC 12"
+              description="A nationwide exam series for students in grades 12 and below, featuring proof-free problems in algebra, geometry, number theory, and combinatorics."
+              endpoint="get_amc12"
+            />
+          }
+        />
+        <Route
+          path="/comp-aime"
           element={
             <CompPage
               title="AIME"
@@ -353,7 +467,7 @@ function App() {
           }
         />
         <Route
-          path="/comp-3"
+          path="/comp-nsml"
           element={
             <NsmlPage
               title="NSML"
@@ -362,7 +476,7 @@ function App() {
           }
         /> 
         <Route
-          path="/comp-4"
+          path="/comp-ictm"
           element={
             <IctmPage
               title="ICTM"
@@ -371,7 +485,7 @@ function App() {
           }
         />
         <Route
-          path="/comp-5"
+          path="/comp-arml"
           element={
             <CompPage
               title="ARML"
