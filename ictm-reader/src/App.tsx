@@ -26,83 +26,67 @@ type CheckResult = {
   solution_text: string | null
 }
 
-// ---- Competition config (route -> backend short_name) --------------------
+// ---- Curated filter data (teammate's design, preserved) ------------------
 
-type Comp = {
-  path: string
-  nav: string
-  short: string
-  title: string
-  description: string
-  hasEvents: boolean
+const topicOptions = ['All topics', 'Algebra', 'Geometry', 'Number Theory', 'Combinatorics', 'Precalculus', 'Advanced Math']
+const gradeOptions = ['9', '10', '11', '12']
+
+const nsmlTopicsByGrade: Record<string, string[]> = {
+  '9': ['Number Bases', 'Counting Basics & Simple Probability', 'Basic Statistics', 'Systems of Equations & Quadratics'],
+  '10': ['Logic, Sets & Venn Diagrams', 'Geometric Probability', 'Circles', 'Surface Area & Volume (3D)'],
+  '11': ['Modular Arithmetic', 'Probability', 'Geometric Transformations (Matrices)', 'Theory of Polynomials'],
+  '12': ['Diophantine Equations', 'Probability', 'Vectors', 'Parametric Equations'],
 }
 
-const COMPS: Comp[] = [
-  {
-    path: '/comp-amc10', nav: 'AMC 10', short: 'AMC10', title: 'AMC 10', hasEvents: false,
-    description:
-      'The AMC 10 is a 25‑question, 75‑minute multiple‑choice national exam for 9th and 10th graders covering algebra, geometry, number theory, and combinatorics, with top performers qualifying for the AIME.',
-  },
-  {
-    path: '/comp-amc12', nav: 'AMC 12', short: 'AMC12', title: 'AMC 12', hasEvents: false,
-    description:
-      'The AMC 12 follows the same format as the AMC 10 but includes pre‑calculus topics such as trigonometry and logarithms, making it the primary qualifying route for upperclassmen to reach the AIME.',
-  },
-  {
-    path: '/comp-aime', nav: 'AIME', short: 'AIME', title: 'AIME', hasEvents: false,
-    description:
-      'The AIME is an invitation‑only, 15‑problem, 3‑hour exam that requires integer answers from 0 to 999 and serves as the crucial bridge from the AMC to the USAJMO and USAMO.',
-  },
-  {
-    path: '/comp-nsml', nav: 'NSML', short: 'NSML', title: 'NSML', hasEvents: false,
-    description:
-      'The North Suburban Math League is an Illinois‑based series of team and individual meets held throughout the school year that fosters collaborative problem‑solving across a wide range of mathematical topics.',
-  },
-  {
-    path: '/comp-ictm', nav: 'ICTM', short: 'ICTM', title: 'ICTM', hasEvents: true,
-    description:
-      'The Illinois Council of Teachers of Mathematics runs a large state‑wide competition with separate Frosh/Soph and Junior/Senior brackets, featuring both individual tests and team challenges to recognize excellence at every high‑school level.',
-  },
-  {
-    path: '/comp-arml', nav: 'ARML Tryouts', short: 'ARML', title: 'ARML Tryouts', hasEvents: false,
-    description:
-      'The ARML tryouts are a rigorous qualifying exam that selects top students for the national ARML team, testing advanced problem‑solving through a mix of individual and team‑based rounds across algebra, geometry, number theory, and combinatorics.',
-  },
-]
-
-const DIFFICULTIES = ['any', 'easy', 'medium', 'hard'] as const
-type Difficulty = (typeof DIFFICULTIES)[number]
-
-// ---- Home ----------------------------------------------------------------
-
-function Home() {
-  return (
-    <section id="home-page" className="home-hero">
-      <div className="hero-card">
-        <h1>Learn AMC, AIME, NSML, ICTM, and ARML Tryouts.</h1>
-        <p className="hero-copy">
-          Practice real past-contest problems by competition, topic, and difficulty. Answer, check
-          your work, and reveal full solutions. Pick a competition below to begin.
-        </p>
-        <div className="hero-actions">
-          <Link to="/comp-amc10" className="nav-button primary">
-            Start with AMC 10
-          </Link>
-        </div>
-      </div>
-    </section>
-  )
+const ictmTopicsByEvent: Record<string, string[]> = {
+  'Algebra I': ['All topics', 'Algebra Basics', 'Linear Equations'],
+  'Geometry': ['All topics', 'Geometry Basics', 'Triangles'],
+  'Algebra II': ['All topics', 'Algebra II', 'Quadratics'],
+  'Pre-Calculus': ['All topics', 'Pre-Calculus Review', 'Trigonometry'],
+  'Freshman-Sophomore 8 Person Team': ['All topics', 'Team Strategy', 'Relay Practice'],
+  'Junior-Senior 8 Person Team': ['All topics', 'Advanced Team Strategy', 'Team Logic'],
+  'Calculator Team': ['All topics', 'Calculator Techniques', 'Scientific Notation'],
+  'Freshman-Sophomore 2 Person Team': ['All topics', 'Fast Thinking', 'Short Answer Strategy'],
+  'Junior-Senior 2 Person Team': ['All topics', 'Advanced Fast Thinking', 'Tie-Breaker Strategy'],
 }
 
-// ---- Practice page (one component for every competition) -----------------
+// The event LABELS above are the teammate's; the database stores them slightly
+// differently. Map label -> DB comp_event so event filtering actually works.
+const ictmEventToDb: Record<string, string> = {
+  'Algebra I': 'Algebra I',
+  'Geometry': 'Geometry',
+  'Algebra II': 'Algebra II',
+  'Pre-Calculus': 'Precalculus',
+  'Freshman-Sophomore 8 Person Team': 'Frosh-Soph 8 Person',
+  'Junior-Senior 8 Person Team': 'Junior-Senior 8 Person',
+  'Calculator Team': 'Calculator Team',
+  'Freshman-Sophomore 2 Person Team': 'Frosh-Soph 2 Person',
+  'Junior-Senior 2 Person Team': 'Junior-Senior 2 Person',
+}
 
-function PracticePage({ comp }: { comp: Comp }) {
-  const [topics, setTopics] = useState<string[]>([])
-  const [events, setEvents] = useState<string[]>([])
+// Map each competition's native difficulty label onto the backend's tier param.
+function toTier(label: string | null): 'easy' | 'medium' | 'hard' | null {
+  if (!label) return null
+  const l = label.toLowerCase()
+  if (l === 'easy' || l === 'medium' || l === 'hard') return l
+  // NSML Q1..Q5
+  if (l === 'q1' || l === 'q2') return 'easy'
+  if (l === 'q3' || l === 'q4') return 'medium'
+  if (l === 'q5') return 'hard'
+  return null
+}
 
-  const [difficulty, setDifficulty] = useState<Difficulty>('any')
-  const [topic, setTopic] = useState<string>('All topics')
-  const [event, setEvent] = useState<string>('')
+// ---- Practice widget (real problems, answer checking, LaTeX) --------------
+
+type PracticeProps = {
+  competition: string
+  difficulty: string | null // native label; mapped to a tier here
+  topic: string | null // teammate's curated label; applied only if it's a real DB tag
+  event: string | null // DB comp_event, or null
+}
+
+function Practice({ competition, difficulty, topic, event }: PracticeProps) {
+  const [realTopics, setRealTopics] = useState<Set<string>>(new Set())
 
   const [problem, setProblem] = useState<Problem | null>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'error' | 'empty'>('idle')
@@ -115,33 +99,13 @@ function PracticePage({ comp }: { comp: Comp }) {
 
   const [score, setScore] = useState({ correct: 0, total: 0 })
 
-  // Reset all per-competition state when navigating between competition pages.
+  // The real, filterable topic tags in the database.
   useEffect(() => {
-    setDifficulty('any')
-    setTopic('All topics')
-    setEvent('')
-    setProblem(null)
-    setStatus('idle')
-    setError(null)
-    setAnswer('')
-    setResult(null)
-    setOverridden(false)
-    setScore({ correct: 0, total: 0 })
-
     fetch('/api/topics')
       .then((r) => r.json())
-      .then(setTopics)
-      .catch(() => setTopics([]))
-
-    if (comp.hasEvents) {
-      fetch(`/api/events?competition=${encodeURIComponent(comp.short)}`)
-        .then((r) => r.json())
-        .then(setEvents)
-        .catch(() => setEvents([]))
-    } else {
-      setEvents([])
-    }
-  }, [comp.short, comp.hasEvents])
+      .then((ts: string[]) => setRealTopics(new Set(ts)))
+      .catch(() => setRealTopics(new Set()))
+  }, [])
 
   async function fetchProblem() {
     setStatus('loading')
@@ -151,10 +115,13 @@ function PracticePage({ comp }: { comp: Comp }) {
     setResult(null)
     setOverridden(false)
 
-    const params = new URLSearchParams({ competition: comp.short })
-    if (difficulty !== 'any') params.set('difficulty', difficulty)
-    if (topic && topic !== 'All topics') params.set('topic', topic)
-    if (comp.hasEvents && event) params.set('event', event)
+    const params = new URLSearchParams({ competition })
+    const tier = toTier(difficulty)
+    if (tier) params.set('difficulty', tier)
+    // Apply the topic filter only when the selected label is a real DB tag;
+    // curated labels without tagged problems are ignored so a problem still loads.
+    if (topic && topic !== 'All topics' && realTopics.has(topic)) params.set('topic', topic)
+    if (event) params.set('event', event)
 
     try {
       const res = await fetch(`/api/problems/random?${params.toString()}`)
@@ -183,10 +150,7 @@ function PracticePage({ comp }: { comp: Comp }) {
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
       const data: CheckResult = await res.json()
       setResult(data)
-      setScore((s) => ({
-        correct: s.correct + (data.correct ? 1 : 0),
-        total: s.total + 1,
-      }))
+      setScore((s) => ({ correct: s.correct + (data.correct ? 1 : 0), total: s.total + 1 }))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error')
     } finally {
@@ -210,49 +174,9 @@ function PracticePage({ comp }: { comp: Comp }) {
   )
 
   return (
-    <section id="comp-page">
-      <h1>{comp.title}</h1>
-      <p>{comp.description}</p>
-
-      <div className="diff-buttons">
-        {DIFFICULTIES.map((d) => (
-          <button
-            key={d}
-            type="button"
-            className={`diff-button ${difficulty === d ? 'active' : ''}`}
-            onClick={() => setDifficulty(d)}
-          >
-            {d}
-          </button>
-        ))}
-      </div>
-
-      <div className="control-row">
-        {comp.hasEvents && (
-          <label className="control-group">
-            <span>Event</span>
-            <select value={event} onChange={(e) => setEvent(e.target.value)}>
-              <option value="">Any event</option>
-              {events.map((ev) => (
-                <option key={ev} value={ev}>
-                  {ev}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <label className="control-group">
-          <span>Topic</span>
-          <select value={topic} onChange={(e) => setTopic(e.target.value)}>
-            <option value="All topics">All topics</option>
-            {topics.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button type="button" className="nav-button primary get-button" onClick={fetchProblem}>
+    <>
+      <div className="practice-bar">
+        <button type="button" className="nav-button primary" onClick={fetchProblem}>
           {problem ? 'New problem' : 'Get problem'}
         </button>
         <span className="score-badge" aria-live="polite">
@@ -264,7 +188,7 @@ function PracticePage({ comp }: { comp: Comp }) {
         <div className="question-card-header">
           <div>
             <p className="question-eyebrow">Question area</p>
-            <h2>{comp.title} question</h2>
+            <h2>Practice question</h2>
           </div>
           {problem && (
             <span className="question-meta">
@@ -277,14 +201,10 @@ function PracticePage({ comp }: { comp: Comp }) {
           {status === 'loading' && <p className="question-placeholder">Loading question…</p>}
           {status === 'error' && <p className="error">Failed to load: {error}</p>}
           {status === 'empty' && (
-            <p className="question-placeholder">
-              No problems available yet for {comp.title} with those filters.
-            </p>
+            <p className="question-placeholder">No problems available yet for these filters.</p>
           )}
           {status === 'idle' && !problem && (
-            <p className="question-placeholder">
-              Choose your filters and hit “Get problem” to begin.
-            </p>
+            <p className="question-placeholder">Hit “Get problem” to begin.</p>
           )}
 
           {status === 'idle' && problem && (
@@ -386,6 +306,215 @@ function PracticePage({ comp }: { comp: Comp }) {
           )}
         </div>
       </div>
+    </>
+  )
+}
+
+// ---- Home ----------------------------------------------------------------
+
+function Home() {
+  return (
+    <section id="home-page" className="home-hero">
+      <div className="hero-card">
+        <h1>Learn AMC, AIME, NSML, ICTM, and ARML Tryouts.</h1>
+        <p className="hero-copy">
+          Practice real past-contest problems by competition, topic, and difficulty. Answer, check
+          your work, and reveal full solutions. Pick a competition below to begin.
+        </p>
+        <div className="hero-actions">
+          <Link to="/comp-amc10" className="nav-button primary">
+            Start with AMC 10
+          </Link>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ---- AMC 10 / AMC 12 / AIME / ARML (difficulty + topic) -------------------
+
+const difficulties = ['easy', 'medium', 'hard'] as const
+type Difficulty = (typeof difficulties)[number]
+
+function CompPage({ title, description, competition }: { title: string; description: string; competition: string }) {
+  const [diff, setDiff] = useState<Difficulty>('easy')
+  const [selectedTopic, setSelectedTopic] = useState('All topics')
+
+  return (
+    <section id="comp-page">
+      <h1>{title}</h1>
+      <p>{description}</p>
+
+      <div className="diff-buttons">
+        {difficulties.map((value) => (
+          <button
+            key={value}
+            type="button"
+            className={`diff-button ${diff === value ? 'active' : ''}`}
+            onClick={() => setDiff(value)}
+          >
+            {value}
+          </button>
+        ))}
+      </div>
+
+      <div className="control-row">
+        <label className="control-group">
+          <span>Topic</span>
+          <select value={selectedTopic} onChange={(e) => setSelectedTopic(e.target.value)}>
+            {topicOptions.map((topic) => (
+              <option key={topic} value={topic}>
+                {topic}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <Practice competition={competition} difficulty={diff} topic={selectedTopic} event={null} />
+
+      <div className="button-row">
+        <Link to="/" className="nav-button">
+          Back to home
+        </Link>
+      </div>
+    </section>
+  )
+}
+
+// ---- NSML (grade + Q1–Q5 + per-grade topics) ------------------------------
+
+function NsmlPage({ title, description }: { title: string; description: string }) {
+  const nsmlDiffs = ['Q1', 'Q2', 'Q3', 'Q4', 'Q5']
+  const [selectedDiff, setSelectedDiff] = useState<string | null>(null)
+  const [selectedGrade, setSelectedGrade] = useState('10')
+  const nsmlTopicOptions = nsmlTopicsByGrade[selectedGrade] ?? topicOptions
+  const [selectedTopic, setSelectedTopic] = useState(nsmlTopicsByGrade['10'][0])
+
+  return (
+    <section id="comp-page">
+      <h1>{title}</h1>
+      <p>{description}</p>
+
+      <div className="diff-buttons">
+        {nsmlDiffs.map((d) => (
+          <button
+            key={d}
+            type="button"
+            className={`diff-button ${selectedDiff === d ? 'active' : ''}`}
+            onClick={() => setSelectedDiff(d)}
+          >
+            {d}
+          </button>
+        ))}
+      </div>
+
+      <div className="control-row">
+        <label className="control-group">
+          <span>Grade</span>
+          <select
+            value={selectedGrade}
+            onChange={(e) => {
+              setSelectedGrade(e.target.value)
+              setSelectedTopic(nsmlTopicsByGrade[e.target.value]?.[0] ?? 'All topics')
+            }}
+          >
+            {gradeOptions.map((grade) => (
+              <option key={grade} value={grade}>
+                Grade {grade}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="control-group">
+          <span>Topic</span>
+          <select value={selectedTopic} onChange={(e) => setSelectedTopic(e.target.value)}>
+            {nsmlTopicOptions.map((topic) => (
+              <option key={topic} value={topic}>
+                {topic}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <Practice competition="NSML" difficulty={selectedDiff} topic={selectedTopic} event={null} />
+
+      <div className="button-row">
+        <Link to="/" className="nav-button">
+          Back to home
+        </Link>
+      </div>
+    </section>
+  )
+}
+
+// ---- ICTM (event + difficulty + per-event topics) -------------------------
+
+function IctmPage({ title, description }: { title: string; description: string }) {
+  const events = Object.keys(ictmTopicsByEvent)
+  const [selected, setSelected] = useState<string | null>(null)
+  const ictmDiffs = ['Easy', 'Medium', 'Hard']
+  const [selectedDiff, setSelectedDiff] = useState<string | null>(null)
+  const [selectedTopic, setSelectedTopic] = useState('All topics')
+  const ictmTopicOptions = (selected && ictmTopicsByEvent[selected]) ? ictmTopicsByEvent[selected] : topicOptions
+
+  return (
+    <section id="comp-page">
+      <h1>{title}</h1>
+      <p>{description}</p>
+
+      <div className="diff-buttons">
+        {ictmDiffs.map((d) => (
+          <button
+            key={d}
+            type="button"
+            className={`diff-button ${selectedDiff === d ? 'active' : ''}`}
+            onClick={() => setSelectedDiff(d)}
+          >
+            {d}
+          </button>
+        ))}
+      </div>
+
+      <div className="control-row">
+        <label className="control-group">
+          <span>Event</span>
+          <select
+            value={selected ?? ''}
+            onChange={(e) => {
+              const val = e.target.value || null
+              setSelected(val)
+              setSelectedTopic(val ? (ictmTopicsByEvent[val]?.[0] ?? 'All topics') : 'All topics')
+            }}
+          >
+            <option value="">Select an event</option>
+            {events.map((e) => (
+              <option key={e} value={e}>
+                {e}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="control-group">
+          <span>Topic</span>
+          <select value={selectedTopic} onChange={(e) => setSelectedTopic(e.target.value)}>
+            {ictmTopicOptions.map((topic) => (
+              <option key={topic} value={topic}>
+                {topic}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <Practice
+        competition="ICTM"
+        difficulty={selectedDiff}
+        topic={selectedTopic}
+        event={selected ? (ictmEventToDb[selected] ?? null) : null}
+      />
 
       <div className="button-row">
         <Link to="/" className="nav-button">
@@ -408,18 +537,74 @@ function App() {
         </div>
       </header>
       <nav className="comps-nav">
-        {COMPS.map((c) => (
-          <Link key={c.path} to={c.path} className="nav-button">
-            {c.nav}
-          </Link>
-        ))}
+        <Link to="/comp-amc10" className="nav-button">AMC 10</Link>
+        <Link to="/comp-amc12" className="nav-button">AMC 12</Link>
+        <Link to="/comp-aime" className="nav-button">AIME</Link>
+        <Link to="/comp-nsml" className="nav-button">NSML</Link>
+        <Link to="/comp-ictm" className="nav-button">ICTM</Link>
+        <Link to="/comp-arml" className="nav-button">ARML Tryouts</Link>
       </nav>
 
       <Routes>
         <Route path="/" element={<Home />} />
-        {COMPS.map((c) => (
-          <Route key={c.path} path={c.path} element={<PracticePage comp={c} />} />
-        ))}
+        <Route
+          path="/comp-amc10"
+          element={
+            <CompPage
+              title="AMC 10"
+              competition="AMC10"
+              description="The AMC 10 is a 25‑question, 75‑minute multiple‑choice national exam for 9th and 10th graders covering algebra, geometry, number theory, and combinatorics, with top performers qualifying for the AIME."
+            />
+          }
+        />
+        <Route
+          path="/comp-amc12"
+          element={
+            <CompPage
+              title="AMC 12"
+              competition="AMC12"
+              description="The AMC 12 follows the same format as the AMC 10 but includes pre‑calculus topics such as trigonometry and logarithms, making it the primary qualifying route for upperclassmen to reach the AIME."
+            />
+          }
+        />
+        <Route
+          path="/comp-aime"
+          element={
+            <CompPage
+              title="AIME"
+              competition="AIME"
+              description="The AIME is an invitation‑only, 15‑problem, 3‑hour exam that requires integer answers from 0 to 999 and serves as the crucial bridge from the AMC to the USAJMO and USAMO."
+            />
+          }
+        />
+        <Route
+          path="/comp-nsml"
+          element={
+            <NsmlPage
+              title="NSML"
+              description="The North Suburban Math League is an Illinois‑based series of team and individual meets held throughout the school year that fosters collaborative problem‑solving across a wide range of mathematical topics."
+            />
+          }
+        />
+        <Route
+          path="/comp-ictm"
+          element={
+            <IctmPage
+              title="ICTM"
+              description="The Illinois Council of Teachers of Mathematics runs a large state‑wide competition with separate Frosh/Soph and Junior/Senior brackets, featuring both individual tests and team challenges to recognize excellence at every high‑school level."
+            />
+          }
+        />
+        <Route
+          path="/comp-arml"
+          element={
+            <CompPage
+              title="ARML Tryouts"
+              competition="ARML"
+              description="The ARML tryouts are a rigorous qualifying exam that selects top students for the national ARML team, testing advanced problem‑solving through a mix of individual and team‑based rounds across algebra, geometry, number theory, and combinatorics."
+            />
+          }
+        />
       </Routes>
     </div>
   )

@@ -555,12 +555,16 @@
 
 /* ---- Practice flow (integrated with the JSON API) ---------------------- */
 
-.control-row .get-button {
-  align-self: flex-end;
+.practice-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 6px 0 14px;
 }
 
 .score-badge {
-  align-self: flex-end;
   padding: 10px 14px;
   border-radius: 999px;
   background: #eef7ef;

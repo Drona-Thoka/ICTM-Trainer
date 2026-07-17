@@ -4,9 +4,10 @@
   --bg: #f8fbff;
   --border: #d9dfea;
   --code-bg: #eef3f9;
-  --accent: #7c3aed;
-  --accent-bg: rgba(124, 58, 237, 0.12);
-  --accent-border: rgba(124, 58, 237, 0.35);
+  --accent: #047857;
+  --accent-bg: rgba(4, 120, 87, 0.12);
+  --accent-border: rgba(4, 120, 87, 0.35);
+  --gold: #E89D1E;
   --social-bg: rgba(239, 246, 255, 0.65);
   --shadow:
     rgba(15, 23, 42, 0.08) 0 10px 20px -10px, rgba(15, 23, 42, 0.06) 0 4px 6px -2px;
@@ -37,9 +38,10 @@
     --bg: #0f172a;
     --border: #334155;
     --code-bg: #1e293b;
-    --accent: #a855f7;
-    --accent-bg: rgba(168, 85, 247, 0.16);
-    --accent-border: rgba(168, 85, 247, 0.45);
+    --accent: #34d399;
+    --accent-bg: rgba(52, 211, 153, 0.16);
+    --accent-border: rgba(52, 211, 153, 0.45);
+    --gold: #f0b44a;
     --social-bg: rgba(30, 41, 59, 0.55);
     --shadow:
       rgba(15, 23, 42, 0.55) 0 10px 20px -10px, rgba(15, 23, 42, 0.35) 0 4px 6px -2px;
@@ -51,11 +53,10 @@
 }
 
 #root {
-  width: 1126px;
+  width: 100%;
   max-width: 100%;
-  margin: 0 auto;
+  margin: 0;
   text-align: center;
-  border-inline: 1px solid var(--border);
   min-height: 100svh;
   display: flex;
   flex-direction: column;
