@@ -1,12 +1,9 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 
-type Summary = {
-  overall: { attempts: number; correct: number; accuracy: number }
-  by_competition: Array<{ competition: string; attempts: number; correct: number; accuracy: number }>
-  by_topic: Array<{ topic: string; attempts: number; correct: number; accuracy: number }>
-  by_difficulty: Array<{ difficulty: string; attempts: number; correct: number; accuracy: number }>
-}
+// Progress lives on /stats (StatsPage), which shows the full breakdown
+// including difficulty and every topic. This page handles the account only.
 
 export default function Auth() {
   const [email, setEmail] = useState('')
@@ -15,28 +12,16 @@ export default function Auth() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
 
-  // Stats state
-  const [stats, setStats] = useState<Summary | null>(null)
-  const [statsLoading, setStatsLoading] = useState(false)
-
   useEffect(() => {
     let mounted = true
     ;(async () => {
       const { data } = await supabase.auth.getUser()
       if (!mounted) return
       setUser(data.user ?? null)
-      if (data.user) {
-        fetchStats()
-      }
     })()
     const resp = supabase.auth.onAuthStateChange((_event, session) => {
       if (mounted) {
         setUser(session?.user ?? null)
-        if (session?.user) {
-          fetchStats()
-        } else {
-          setStats(null)
-        }
       }
     })
     return () => {
@@ -50,27 +35,6 @@ export default function Auth() {
       }
     }
   }, [])
-
-  // The token comes from the live session, so no user argument is needed.
-  async function fetchStats() {
-    setStatsLoading(true)
-    try {
-      const session = (await supabase.auth.getSession()).data.session
-      if (!session) return
-      const token = session.access_token
-      const res = await fetch('/api/stats/summary', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setStats(data)
-      }
-    } catch (e) {
-      console.warn('Failed to fetch stats:', e)
-    } finally {
-      setStatsLoading(false)
-    }
-  }
 
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault()
@@ -96,7 +60,6 @@ export default function Auth() {
     await supabase.auth.signOut()
     setMessage('Signed out')
     setUser(null)
-    setStats(null)
   }
 
   const getInitials = (email: string) => {
@@ -144,77 +107,15 @@ export default function Auth() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center', marginBottom: '24px' }}>
+              <Link to="/stats" className="nav-button primary">
+                View your progress
+              </Link>
               <button className="nav-button" onClick={handleSignOut}>
                 Sign out
               </button>
             </div>
 
-            {/* ---- Stats card ---- */}
-            <div className="hero-card" style={{ maxWidth: '100%', padding: '20px' }}>
-              <h2 style={{ marginTop: 0, fontSize: '1.2rem' }}>Your Progress</h2>
-              {statsLoading ? (
-                <p>Loading stats…</p>
-              ) : stats && stats.overall.attempts > 0 ? (
-                <>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12, marginBottom: 16 }}>
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', opacity: 0.7 }}>Attempts</div>
-                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent)' }}>{stats.overall.attempts}</div>
-                    </div>
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', opacity: 0.7 }}>Correct</div>
-                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent)' }}>{stats.overall.correct}</div>
-                    </div>
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', opacity: 0.7 }}>Accuracy</div>
-                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent)' }}>{stats.overall.accuracy}%</div>
-                    </div>
-                  </div>
-
-                  {/* Competition breakdown */}
-                  {stats.by_competition.length > 0 && (
-                    <div style={{ marginTop: 12 }}>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: 8 }}>By Competition</div>
-                      {stats.by_competition.map((c) => (
-                        <div key={c.competition} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                          <span style={{ minWidth: 80, fontSize: '0.85rem' }}>{c.competition}</span>
-                          <span style={{ flex: 1, background: 'var(--border)', height: 6, borderRadius: 4, overflow: 'hidden' }}>
-                            <div style={{ width: `${c.accuracy}%`, height: '100%', background: 'var(--accent)', borderRadius: 4 }} />
-                          </span>
-                          <span style={{ minWidth: 50, textAlign: 'right', fontSize: '0.85rem', fontWeight: 600 }}>{c.accuracy}%</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Topic breakdown */}
-                  {stats.by_topic.length > 0 && (
-                    <div style={{ marginTop: 12 }}>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: 8 }}>By Topic</div>
-                      {stats.by_topic.slice(0, 5).map((t) => (
-                        <div key={t.topic} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                          <span style={{ minWidth: 100, fontSize: '0.85rem' }}>{t.topic}</span>
-                          <span style={{ flex: 1, background: 'var(--border)', height: 6, borderRadius: 4, overflow: 'hidden' }}>
-                            <div style={{ width: `${t.accuracy}%`, height: '100%', background: 'var(--accent)', borderRadius: 4 }} />
-                          </span>
-                          <span style={{ minWidth: 50, textAlign: 'right', fontSize: '0.85rem', fontWeight: 600 }}>{t.accuracy}%</span>
-                        </div>
-                      ))}
-                      {stats.by_topic.length > 5 && (
-                        <div style={{ fontSize: '0.75rem', opacity: 0.6, textAlign: 'center', marginTop: 4 }}>
-                          + {stats.by_topic.length - 5} more topics
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              ) : (
-                <p style={{ color: 'var(--text-h)', opacity: 0.7, fontStyle: 'italic' }}>
-                  No data available – start practicing to see your stats.
-                </p>
-              )}
-            </div>
           </>
         ) : (
           <form onSubmit={handleSignIn} style={{ display: 'grid', gap: '16px' }}>
@@ -262,7 +163,7 @@ export default function Auth() {
                 disabled={loading}
                 onClick={handleSignIn}
               >
-                {loading ? 'Signing in…' : 'Sign in'}
+                {loading ? 'Signing inâ€¦' : 'Sign in'}
               </button>
               <button
                 type="button"
@@ -270,7 +171,7 @@ export default function Auth() {
                 disabled={loading}
                 onClick={handleSignUp}
               >
-                {loading ? 'Signing up…' : 'Sign up'}
+                {loading ? 'Signing upâ€¦' : 'Sign up'}
               </button>
             </div>
           </form>

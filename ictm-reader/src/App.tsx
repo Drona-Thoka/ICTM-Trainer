@@ -886,7 +886,13 @@ function App() {
             <div className="brand">ICTM Trainer</div>
             <div className="brand-subtitle">Math competition practice hub</div>
           </div>
-          <div style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)' }}>
+          <div style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* Only meaningful once signed in — stats are per-account. */}
+            {user && (
+              <Link to="/stats" className="nav-button" style={{ minWidth: 'auto', padding: '8px 14px' }}>
+                My progress
+              </Link>
+            )}
             <ThemeToggle />
           </div>
         </header>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import './App.css'
 
@@ -12,11 +13,20 @@ type Summary = {
 export default function StatsPage() {
   const [data, setData] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
+  // Distinguish "signed out" from "the request failed" — both used to render
+  // the same misleading "sign in" message.
+  const [signedIn, setSignedIn] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let cancelled = false
+
     async function fetchStats() {
       const session = (await supabase.auth.getSession()).data.session
+      if (cancelled) return
+      setSignedIn(!!session)
       if (!session) {
+        setData(null)
         setLoading(false)
         return
       }
@@ -24,23 +34,68 @@ export default function StatsPage() {
         const res = await fetch('/api/stats/summary', {
           headers: { Authorization: `Bearer ${session.access_token}` },
         })
+        if (cancelled) return
         if (res.ok) {
-          const json = await res.json()
-          setData(json)
+          setData(await res.json())
+          setError(null)
+        } else {
+          setError(`Could not load your stats (${res.status}).`)
         }
       } catch (e) {
-        console.error(e)
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load your stats.')
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
+
     fetchStats()
+    // Re-fetch when the user signs in or out while this page is open.
+    const { data: sub } = supabase.auth.onAuthStateChange(() => fetchStats())
+    return () => {
+      cancelled = true
+      sub?.subscription?.unsubscribe()
+    }
   }, [])
 
   if (loading) return <div style={{ padding: 40 }}>Loading stats…</div>
-  if (!data) return <div style={{ padding: 40 }}>Sign in to see your stats.</div>
+
+  if (!signedIn) {
+    return (
+      <section style={{ padding: '40px 20px', textAlign: 'center' }}>
+        <div className="hero-card" style={{ maxWidth: 520, margin: '0 auto' }}>
+          <h1 style={{ marginTop: 0 }}>Your Progress</h1>
+          <p>Sign in to track your accuracy across competitions, topics, and difficulty.</p>
+          <Link to="/auth" className="nav-button primary">Sign in</Link>
+        </div>
+      </section>
+    )
+  }
+
+  if (error || !data) {
+    return (
+      <section style={{ padding: '40px 20px', textAlign: 'center' }}>
+        <div className="hero-card" style={{ maxWidth: 520, margin: '0 auto' }}>
+          <h1 style={{ marginTop: 0 }}>Your Progress</h1>
+          <p className="error">{error ?? 'Could not load your stats.'}</p>
+          <Link to="/" className="nav-button">Back to Home</Link>
+        </div>
+      </section>
+    )
+  }
 
   const { overall, by_competition, by_topic, by_difficulty } = data
+
+  if (overall.attempts === 0) {
+    return (
+      <section style={{ padding: '40px 20px', textAlign: 'center' }}>
+        <div className="hero-card" style={{ maxWidth: 520, margin: '0 auto' }}>
+          <h1 style={{ marginTop: 0 }}>Your Progress</h1>
+          <p>No data yet — answer a few problems and your stats will appear here.</p>
+          <Link to="/comp-amc10" className="nav-button primary">Start practicing</Link>
+        </div>
+      </section>
+    )
+  }
 
   return (
     <section style={{ padding: '40px 20px', maxWidth: 1200, margin: '0 auto' }}>
@@ -125,8 +180,9 @@ export default function StatsPage() {
         </div>
       )}
 
+      {/* Link, not <a href>: a plain anchor forces a full page reload. */}
       <div style={{ marginTop: 24, textAlign: 'center' }}>
-        <a href="/" className="nav-button">Back to Home</a>
+        <Link to="/" className="nav-button">Back to Home</Link>
       </div>
     </section>
   )
