@@ -75,7 +75,20 @@ def create_app() -> Flask:
 
     @app.get("/api/topics")
     def topics():
-        return jsonify(queries.list_topics(get_db()))
+        """Topics with counts, optionally narrowed to a competition/event.
+
+        Returns only topics that have approved problems, so the frontend can
+        build dropdowns that always filter something.
+        """
+        return jsonify(
+            queries.list_topics(
+                get_db(),
+                competition=request.args.get("competition"),
+                # Repeatable: one dropdown choice can cover several stored
+                # comp_event values (see queries._event_clause).
+                event=request.args.getlist("event") or None,
+            )
+        )
 
     @app.get("/api/events")
     def events():
@@ -99,7 +112,7 @@ def create_app() -> Flask:
             competition=request.args.get("competition"),
             topic=request.args.get("topic"),
             difficulty=request.args.get("difficulty"),
-            event=request.args.get("event"),
+            event=request.args.getlist("event") or None,
             year=request.args.get("year", type=int),
             year_min=request.args.get("year_min", type=int),
             year_max=request.args.get("year_max", type=int),

@@ -48,9 +48,55 @@ def list_competitions(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     ).fetchall()
 
 
-def list_topics(conn: sqlite3.Connection) -> list[str]:
-    rows = conn.execute("SELECT name FROM topics ORDER BY name").fetchall()
-    return [r["name"] for r in rows]
+def _event_clause(event) -> tuple[str, list]:
+    """WHERE fragment for one event or several.
+
+    Several, because one dropdown choice can cover more than one stored value:
+    ingestion recorded the same round as both 'Regional FS 8-Person' and
+    'Regional Frosh-Soph 8-Person Team'.
+    """
+    events = [event] if isinstance(event, str) else list(event)
+    placeholders = ", ".join("?" for _ in events)
+    return f"p.comp_event IN ({placeholders})", events
+
+
+def list_topics(
+    conn: sqlite3.Connection,
+    competition: str | None = None,
+    event: str | list[str] | None = None,
+) -> list[dict]:
+    """Topics that actually have approved problems, with counts.
+
+    Deliberately driven by problem_topics rather than the topics table: the bank
+    defines ~32 topics but only tags a handful, and a dropdown built from the
+    table alone offers filters that silently match nothing. Narrowing by
+    competition/event keeps each page's options honest.
+    """
+    clauses = ["p.review_status = 'approved'"]
+    params: list = []
+
+    if competition:
+        clauses.append("c.short_name = ?")
+        params.append(competition)
+    if event:
+        frag, frag_params = _event_clause(event)
+        clauses.append(frag)
+        params.extend(frag_params)
+
+    rows = conn.execute(
+        f"""
+        SELECT t.name AS name, COUNT(DISTINCT p.problem_id) AS count
+        FROM topics t
+        JOIN problem_topics pt ON pt.topic_id = t.topic_id
+        JOIN problems p ON p.problem_id = pt.problem_id
+        JOIN competitions c ON c.competition_id = p.competition_id
+        WHERE {' AND '.join(clauses)}
+        GROUP BY t.name
+        ORDER BY t.name
+        """,
+        params,
+    ).fetchall()
+    return [{"name": r["name"], "count": r["count"]} for r in rows]
 
 
 def list_events(conn: sqlite3.Connection, competition: str) -> list[str]:
@@ -96,7 +142,7 @@ def _build_filters(
     competition: str | None,
     topic: str | None,
     difficulty: str | None,
-    event: str | None,
+    event: str | list[str] | None,
     year: int | None,
     year_min: int | None = None,
     year_max: int | None = None,
@@ -120,8 +166,9 @@ def _build_filters(
         params.extend(frag_params)
 
     if event:
-        clauses.append("p.comp_event = ?")
-        params.append(event)
+        frag, frag_params = _event_clause(event)
+        clauses.append(frag)
+        params.extend(frag_params)
 
     if year is not None:
         clauses.append("p.comp_year = ?")
@@ -157,7 +204,7 @@ def get_random_problem(
     competition: str | None = None,
     topic: str | None = None,
     difficulty: str | None = None,
-    event: str | None = None,
+    event: str | list[str] | None = None,
     year: int | None = None,
     year_min: int | None = None,
     year_max: int | None = None,
