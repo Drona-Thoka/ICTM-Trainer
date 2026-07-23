@@ -88,6 +88,32 @@ for t in client.get(f"/api/topics?competition=ICTM&event={ev}").get_json():
         f"{r.status_code}",
     )
 
+print("\n-- level/event split: repeated event params --")
+# The UI offers Level and Event separately, so one choice ("Regional" + a round)
+# can cover several stored comp_event values. The API must accept them all.
+regional = [e for e in events if e.startswith("Regional")]
+qs = "&".join(f"event={e.replace(' ', '%20')}" for e in regional)
+r = client.get(f"/api/problems/random?competition=ICTM&{qs}")
+check("all Regional events at once returns a problem", r.status_code == 200, r.status_code)
+check("and it is a Regional one", r.get_json().get("event", "").startswith("Regional"),
+      r.get_json().get("event"))
+
+t = client.get(f"/api/topics?competition=ICTM&{qs}").get_json()
+check("topics scope to the whole Regional set", all(x["count"] > 0 for x in t), t)
+
+# 'Regional FS 8-Person' and 'Regional Frosh-Soph 8-Person Team' are the same
+# round under two ingestion names; the dropdown folds them into one option, so
+# selecting it must query both and reach the 9 problems under the odd name.
+pair = ["Regional FS 8-Person", "Regional Frosh-Soph 8-Person Team"]
+if all(p in events for p in events if p in pair):
+    qs2 = "&".join(f"event={p.replace(' ', '%20')}" for p in pair)
+    seen = set()
+    for _ in range(30):
+        rr = client.get(f"/api/problems/random?competition=ICTM&{qs2}")
+        if rr.status_code == 200:
+            seen.add(rr.get_json()["event"])
+    check("aliased pair reaches both stored names", seen == set(pair), seen)
+
 print("\n-- a topic with no problems is never offered --")
 r = client.get("/api/problems/random?competition=AIME&topic=Relay%20Practice")
 check("a made-up topic yields 404, not a random problem", r.status_code == 404, r.status_code)

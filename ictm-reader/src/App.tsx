@@ -5,7 +5,7 @@ import './App.css'
 import Auth from './Auth'
 import StatsPage from './StatsPage'
 import ResetPassword from './ResetPassword'
-import { ALL_TOPICS, useEvents, useTopics } from './useFilterOptions'
+import { ALL_EVENTS, ALL_LEVELS, ALL_TOPICS, useIctmEvents, useTopics } from './useFilterOptions'
 import { supabase } from './supabaseClient'
 import { ThemeProvider, useTheme } from './ThemeContext'
 
@@ -47,16 +47,16 @@ function isTeamEvent(event: string | null): boolean {
 /** Topic <select> driven by whatever the bank actually has tagged. */
 function TopicSelect({
   competition,
-  event,
+  events,
   value,
   onChange,
 }: {
   competition: string
-  event?: string | null
+  events?: string[] | null
   value: string
   onChange: (v: string) => void
 }) {
-  const topics = useTopics(competition, event)
+  const topics = useTopics(competition, events)
 
   return (
     <label className="control-group">
@@ -101,11 +101,11 @@ function getInitials(email: string): string {
 type PracticeProps = {
   competition: string
   difficulty: string | null // native label; mapped to a tier here
-  topic: string | null // teammate's curated label; applied only if it's a real DB tag
-  event: string | null // DB comp_event, or null
+  topic: string | null
+  events: string[] | null // stored comp_event values, or null for no event filter
 }
 
-function Practice({ competition, difficulty, topic, event }: PracticeProps) {
+function Practice({ competition, difficulty, topic, events }: PracticeProps) {
 
   // Year range: bounds come from the data, so the slider widens as more
   // contests are ingested. null bounds = this competition has no year data.
@@ -159,7 +159,7 @@ function Practice({ competition, difficulty, topic, event }: PracticeProps) {
     if (tier) params.set('difficulty', tier)
     // Options come from the bank, so any selection here is a real tag.
     if (topic && topic !== ALL_TOPICS) params.set('topic', topic)
-    if (event) params.set('event', event)
+    for (const e of events ?? []) params.append('event', e)
     // Only send the range when it's narrower than everything available.
     if (years && bounds && (years[0] > bounds.min || years[1] < bounds.max)) {
       params.set('year_min', String(years[0]))
@@ -678,7 +678,7 @@ function CompPage({ title, description, competition }: { title: string; descript
         <TopicSelect competition={competition} value={selectedTopic} onChange={setSelectedTopic} />
       </div>
 
-      <Practice competition={competition} difficulty={diff} topic={selectedTopic} event={null} />
+      <Practice competition={competition} difficulty={diff} topic={selectedTopic} events={null} />
 
       <div className="button-row">
         <Link to="/" className="nav-button">
@@ -731,7 +731,7 @@ function NsmlPage({ title, description }: { title: string; description: string }
         <TopicSelect competition="NSML" value={selectedTopic} onChange={setSelectedTopic} />
       </div>
 
-      <Practice competition="NSML" difficulty={selectedDiff} topic={selectedTopic} event={null} />
+      <Practice competition="NSML" difficulty={selectedDiff} topic={selectedTopic} events={null} />
 
       <div className="button-row">
         <Link to="/" className="nav-button">
@@ -745,13 +745,19 @@ function NsmlPage({ title, description }: { title: string; description: string }
 // ---- ICTM (event + difficulty + per-event topics) -------------------------
 
 function IctmPage({ title, description }: { title: string; description: string }) {
-  // Real comp_event values from the bank — they carry the Regional/State split
-  // ("Regional Algebra I", "State Algebra I") that hardcoded labels missed.
-  const events = useEvents('ICTM')
-  const [selected, setSelected] = useState<string | null>(null)
+  // The bank stores level and event fused into one string ("Regional Algebra I");
+  // useIctmEvents splits them so they can be chosen separately.
+  const { levels, eventNames, resolve } = useIctmEvents()
+  const [level, setLevel] = useState(ALL_LEVELS)
+  const [eventName, setEventName] = useState(ALL_EVENTS)
   const ictmDiffs = ['All', 'Easy', 'Medium', 'Hard']
   const [selectedDiff, setSelectedDiff] = useState<string>('All')
   const [selectedTopic, setSelectedTopic] = useState(ALL_TOPICS)
+
+  // Null when nothing is narrowed, so no event filter is sent at all.
+  const selectedEvents =
+    level === ALL_LEVELS && eventName === ALL_EVENTS ? null : resolve(level, eventName)
+  const teamRound = isTeamEvent(eventName)
 
   return (
     <section id="comp-page">
@@ -773,28 +779,40 @@ function IctmPage({ title, description }: { title: string; description: string }
 
       <div className="control-row">
         <label className="control-group">
+          <span>Level</span>
+          <select value={level} onChange={(e) => setLevel(e.target.value)}>
+            <option value={ALL_LEVELS}>{ALL_LEVELS}</option>
+            {levels.map((l) => (
+              <option key={l} value={l}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="control-group">
           <span>Event</span>
           <select
-            value={selected ?? ''}
+            value={eventName}
             onChange={(e) => {
-              setSelected(e.target.value || null)
+              setEventName(e.target.value)
               setSelectedTopic(ALL_TOPICS)
             }}
           >
-            <option value="">All events</option>
-            {events.map((e) => (
-              <option key={e} value={e}>
-                {e}
+            <option value={ALL_EVENTS}>{ALL_EVENTS}</option>
+            {eventNames.map((n) => (
+              <option key={n} value={n}>
+                {n}
               </option>
             ))}
           </select>
         </label>
 
         {/* Team rounds are scored as a whole round, so they have no topic split. */}
-        {!isTeamEvent(selected) && (
+        {!teamRound && (
           <TopicSelect
             competition="ICTM"
-            event={selected}
+            events={selectedEvents}
             value={selectedTopic}
             onChange={setSelectedTopic}
           />
@@ -804,8 +822,8 @@ function IctmPage({ title, description }: { title: string; description: string }
       <Practice
         competition="ICTM"
         difficulty={selectedDiff}
-        topic={isTeamEvent(selected) ? null : selectedTopic}
-        event={selected}
+        topic={teamRound ? null : selectedTopic}
+        events={selectedEvents}
       />
 
       <div className="button-row">

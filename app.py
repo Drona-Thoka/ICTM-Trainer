@@ -84,7 +84,9 @@ def create_app() -> Flask:
             queries.list_topics(
                 get_db(),
                 competition=request.args.get("competition"),
-                event=request.args.get("event"),
+                # Repeatable: one dropdown choice can cover several stored
+                # comp_event values (see queries._event_clause).
+                event=request.args.getlist("event") or None,
             )
         )
 
@@ -110,7 +112,7 @@ def create_app() -> Flask:
             competition=request.args.get("competition"),
             topic=request.args.get("topic"),
             difficulty=request.args.get("difficulty"),
-            event=request.args.get("event"),
+            event=request.args.getlist("event") or None,
             year=request.args.get("year", type=int),
             year_min=request.args.get("year_min", type=int),
             year_max=request.args.get("year_max", type=int),

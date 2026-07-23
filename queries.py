@@ -48,10 +48,22 @@ def list_competitions(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     ).fetchall()
 
 
+def _event_clause(event) -> tuple[str, list]:
+    """WHERE fragment for one event or several.
+
+    Several, because one dropdown choice can cover more than one stored value:
+    ingestion recorded the same round as both 'Regional FS 8-Person' and
+    'Regional Frosh-Soph 8-Person Team'.
+    """
+    events = [event] if isinstance(event, str) else list(event)
+    placeholders = ", ".join("?" for _ in events)
+    return f"p.comp_event IN ({placeholders})", events
+
+
 def list_topics(
     conn: sqlite3.Connection,
     competition: str | None = None,
-    event: str | None = None,
+    event: str | list[str] | None = None,
 ) -> list[dict]:
     """Topics that actually have approved problems, with counts.
 
@@ -67,8 +79,9 @@ def list_topics(
         clauses.append("c.short_name = ?")
         params.append(competition)
     if event:
-        clauses.append("p.comp_event = ?")
-        params.append(event)
+        frag, frag_params = _event_clause(event)
+        clauses.append(frag)
+        params.extend(frag_params)
 
     rows = conn.execute(
         f"""
@@ -129,7 +142,7 @@ def _build_filters(
     competition: str | None,
     topic: str | None,
     difficulty: str | None,
-    event: str | None,
+    event: str | list[str] | None,
     year: int | None,
     year_min: int | None = None,
     year_max: int | None = None,
@@ -153,8 +166,9 @@ def _build_filters(
         params.extend(frag_params)
 
     if event:
-        clauses.append("p.comp_event = ?")
-        params.append(event)
+        frag, frag_params = _event_clause(event)
+        clauses.append(frag)
+        params.extend(frag_params)
 
     if year is not None:
         clauses.append("p.comp_year = ?")
@@ -190,7 +204,7 @@ def get_random_problem(
     competition: str | None = None,
     topic: str | None = None,
     difficulty: str | None = None,
-    event: str | None = None,
+    event: str | list[str] | None = None,
     year: int | None = None,
     year_min: int | None = None,
     year_max: int | None = None,
