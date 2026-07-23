@@ -7,19 +7,31 @@ solution endpoints) to include them.
 """
 
 import json
-import os
 import sqlite3
+from pathlib import PurePosixPath
 
+import config
 from difficulty import normalize
 from equivalence import answers_equal
 from queries import get_topics_for_problem
 
 
 def _image_url(image_path: str | None) -> str | None:
-    """DB image_path ('images/AMC10A_2023_11.png') -> served URL, or None."""
+    """DB image_path ('images/AMC10A_2023_11.png') -> served URL, or None.
+
+    Keeps any subdirectory below the bank's images/ root — the ICTM images live
+    in images/ictm/, so flattening to a basename would 404 as soon as ingestion
+    starts attaching those paths.
+
+    The base is configurable so diagrams can be served straight off a CDN in
+    production instead of costing a Python request each. See config.IMAGE_BASE_URL.
+    """
     if not image_path:
         return None
-    return f"/api/images/{os.path.basename(image_path)}"
+    rel = PurePosixPath(image_path.replace("\\", "/"))
+    if rel.parts and rel.parts[0] == "images":
+        rel = PurePosixPath(*rel.parts[1:])
+    return f"{config.IMAGE_BASE_URL}/{rel}"
 
 
 def _choices(choices_json: str | None) -> dict | None:

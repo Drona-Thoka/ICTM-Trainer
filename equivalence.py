@@ -25,17 +25,31 @@ import math
 import re
 from fractions import Fraction
 
-from sympy.parsing.sympy_parser import (
-    parse_expr,
-    standard_transformations,
-    implicit_multiplication_application,
-)
-
 _REL_TOL = 1e-6
 _ABS_TOL = 1e-9
 _MAX_LEN = 100  # cap before handing anything to the parser (DoS guard)
 
-_TRANSFORMS = standard_transformations + (implicit_multiplication_application,)
+# SymPy is ~70 MB and imports slowly, but it is only the last-resort path here —
+# exact-string, Fraction and float comparisons settle most answers first. Import
+# it on first symbolic use instead of at module load so a cold start (serverless)
+# does not pay for it, and cache the parser + transformations after that.
+_sympy_parse = None
+_TRANSFORMS = None
+
+
+def _load_sympy():
+    """Import SymPy on demand. Returns (parse_expr, transformations)."""
+    global _sympy_parse, _TRANSFORMS
+    if _sympy_parse is None:
+        from sympy.parsing.sympy_parser import (
+            parse_expr,
+            standard_transformations,
+            implicit_multiplication_application,
+        )
+
+        _sympy_parse = parse_expr
+        _TRANSFORMS = standard_transformations + (implicit_multiplication_application,)
+    return _sympy_parse, _TRANSFORMS
 
 # After normalization, only these characters may reach the SymPy parser. Anything
 # else (a leftover LaTeX backslash, an unhandled command) fails the check -> None.
@@ -119,7 +133,8 @@ def _to_expr_value(s: str):
     if not expr_str:
         return None
     try:
-        expr = parse_expr(expr_str, transformations=_TRANSFORMS, evaluate=True)
+        parse_expr, transforms = _load_sympy()
+        expr = parse_expr(expr_str, transformations=transforms, evaluate=True)
         if expr.free_symbols:
             return None
         return float(expr.evalf())  # raises for complex/non-real -> caught below

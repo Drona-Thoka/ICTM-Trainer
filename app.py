@@ -1,5 +1,5 @@
-"""
-app.py — JSON API for the ICTM-Trainer web app.
+﻿"""
+app.py â€” JSON API for the ICTM-Trainer web app.
 
 Read-only Flask service over the (separate, still-ingesting) problem bank at
 ../il-math-problem-bank. Serves problems, filters them by
@@ -9,12 +9,8 @@ diagram images. Difficulty is normalized to easy/medium/hard (see difficulty.py)
 Run:  flask --app app run   (or: python app.py)
 """
 
-import os
-import sqlite3
-
-from flask import Flask, g, jsonify, request, send_from_directory, session
+from flask import Flask, g, jsonify, request, send_from_directory
 from flask_cors import CORS
-from werkzeug.security import check_password_hash, generate_password_hash
 
 import config
 import queries
@@ -28,7 +24,6 @@ from stats import record_attempt, get_summary, set_attempt_correct
 
 def create_app() -> Flask:
     app = Flask(__name__)
-    app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
     # The frontend is served from a different origin in dev (Vite on :5173).
     CORS(app, resources={r"/api/*": {"origins": "*"}})
 
@@ -37,39 +32,18 @@ def create_app() -> Flask:
             g.db = queries.get_connection(config.DB_PATH)
         return g.db
 
-    def get_auth_db():
-        if "auth_db" not in g:
-            conn = sqlite3.connect(str(config.AUTH_DB_PATH), check_same_thread=False)
-            conn.row_factory = sqlite3.Row
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT NOT NULL UNIQUE,
-                    password_hash TEXT NOT NULL
-                )
-                """
-            )
-            conn.commit()
-            g.auth_db = conn
-        return g.auth_db
-
     @app.teardown_appcontext
     def close_db(_exc):
         db = g.pop("db", None)
         if db is not None:
             db.close()
 
-        auth_db = g.pop("auth_db", None)
-        if auth_db is not None:
-            auth_db.close()
-
     # ---- Helper to get user ID from Supabase JWT ----
     def get_user_id_from_token():
         """Extract the user ID from the Authorization: Bearer <token> header.
 
         Returns None when the header is missing/invalid or Supabase isn't
-        configured — callers treat that as "not authenticated".
+        configured â€” callers treat that as "not authenticated".
         """
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
@@ -94,58 +68,6 @@ def create_app() -> Flask:
     def health():
         return jsonify(status="ok", problems=queries.count_approved(get_db()))
 
-    @app.post("/api/auth/signup")
-    def signup():
-        payload = request.get_json(silent=True) or {}
-        username = (payload.get("username") or "").strip()
-        password = payload.get("password") or ""
-
-        if not username or not password:
-            return jsonify(error="username and password are required."), 400
-
-        conn = get_auth_db()
-        existing = conn.execute(
-            "SELECT 1 FROM users WHERE username = ?",
-            (username,),
-        ).fetchone()
-        if existing is not None:
-            return jsonify(error="username already exists."), 409
-
-        conn.execute(
-            "INSERT INTO users (username, password_hash) VALUES (?, ?)",
-            (username, generate_password_hash(password)),
-        )
-        conn.commit()
-        session["username"] = username
-        return jsonify(username=username), 201
-
-    @app.post("/api/auth/login")
-    def login():
-        payload = request.get_json(silent=True) or {}
-        username = (payload.get("username") or "").strip()
-        password = payload.get("password") or ""
-
-        if not username or not password:
-            return jsonify(error="username and password are required."), 400
-
-        conn = get_auth_db()
-        row = conn.execute(
-            "SELECT password_hash FROM users WHERE username = ?",
-            (username,),
-        ).fetchone()
-        if row is None or not check_password_hash(row["password_hash"], password):
-            return jsonify(error="invalid credentials."), 401
-
-        session["username"] = username
-        return jsonify(ok=True, username=username), 200
-
-    @app.get("/api/auth/me")
-    def me():
-        username = session.get("username")
-        if not username:
-            return jsonify(error="not authenticated."), 401
-        return jsonify(username=username), 200
-
     @app.get("/api/competitions")
     def competitions():
         rows = queries.list_competitions(get_db())
@@ -164,7 +86,7 @@ def create_app() -> Flask:
 
     @app.get("/api/years")
     def years():
-        """Year range available for a competition — drives the year slider."""
+        """Year range available for a competition â€” drives the year slider."""
         competition = request.args.get("competition")
         if not competition:
             return jsonify(error="Query param 'competition' is required."), 400

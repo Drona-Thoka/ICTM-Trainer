@@ -7,6 +7,7 @@ backend only READS this data — it never writes to problems.db.
 Override the defaults with environment variables:
     PROBLEM_BANK_DB    — absolute/relative path to problems.db
     PROBLEM_BANK_IMAGES — directory holding the diagram images
+    IMAGE_BASE_URL      — URL prefix the frontend uses for diagrams
 """
 
 import os
@@ -32,6 +33,8 @@ IMAGES_DIR = Path(
     os.environ.get("PROBLEM_BANK_IMAGES", _DEFAULT_BANK_DIR / "images")
 ).resolve()
 
-AUTH_DB_PATH = Path(
-    os.environ.get("AUTH_DB_PATH", _BASE_DIR / "auth.db")
-).resolve()
+# URL prefix for diagram images. Defaults to the Flask route, so local dev works
+# with no setup. In production set IMAGE_BASE_URL=/images and stage the files into
+# the frontend build (scripts/stage_images.py) so the CDN serves them directly —
+# 938 immutable files have no business costing a Python invocation each.
+IMAGE_BASE_URL = os.environ.get("IMAGE_BASE_URL", "/api/images").rstrip("/")

@@ -12,15 +12,8 @@ Run:  python test_security_stats.py
 """
 
 import sys
-import tempfile
-from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
-
-import config
-
-# Use a throwaway accounts DB so probing never touches a real auth.db.
-config.AUTH_DB_PATH = Path(tempfile.mkdtemp()) / "auth_test.db"
 
 import stats
 from app import create_app
@@ -40,41 +33,15 @@ app = create_app()
 client = app.test_client()
 
 # ---------------------------------------------------------------------------
-# 1. SQL injection against the local account system
+# 1. SQL injection against the surviving SQL surface
 # ---------------------------------------------------------------------------
-print("\n-- SQL injection: accounts --")
-
-client.post("/api/auth/signup", json={"username": "victim", "password": "pw-victim"})
-
-PAYLOADS = [
-    "admin' --",
-    "admin'--",
-    "' OR '1'='1",
-    "' OR 1=1 --",
-    "'; DROP TABLE users; --",
-    "' UNION SELECT password_hash FROM users --",
-    "victim'/*",
-    "\\' OR 1=1 --",
-    "victim' AND '1'='1",
-]
-
-for payload in PAYLOADS:
-    r = client.post("/api/auth/login", json={"username": payload, "password": "x"})
-    check(f"login rejects {payload!r}", r.status_code == 401, r.status_code)
-
-# The tautology payloads must not authenticate as the real user either.
-r = client.post("/api/auth/login", json={"username": "victim", "password": "' OR '1'='1"})
-check("password tautology rejected", r.status_code == 401, r.status_code)
-
-# After the DROP TABLE attempt, the table must still be intact.
-r = client.post("/api/auth/login", json={"username": "victim", "password": "pw-victim"})
-check("users table survived DROP TABLE payload", r.status_code == 200, r.status_code)
-
-# A payload used as a username is stored literally, not executed.
-r = client.post("/api/auth/signup", json={"username": "'; DROP TABLE users; --", "password": "pw"})
-check("payload stored as a literal username", r.status_code == 201, r.status_code)
-r = client.post("/api/auth/login", json={"username": "victim", "password": "pw-victim"})
-check("users table still intact afterwards", r.status_code == 200, r.status_code)
+# The local username/password system this used to probe is gone (Supabase owns
+# auth now), so the only SQL the app builds from user input is the problem
+# filters. Auth is verified by Supabase and never reaches a SQL string here.
+print("\n-- dead auth surface is gone --")
+for gone, method in [("/api/auth/signup", "POST"), ("/api/auth/login", "POST"), ("/api/auth/me", "GET")]:
+    r = client.open(gone, method=method, json={})
+    check(f"{gone} -> 404", r.status_code == 404, r.status_code)
 
 print("\n-- SQL injection: problem filters --")
 INJECT = "' OR 1=1 --"

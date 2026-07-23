@@ -41,12 +41,15 @@ for route in [
     "/api/years",
     "/api/problems/random",
     "/api/problems/<int:problem_id>/check",
-    "/api/auth/signup",
-    "/api/auth/login",
     "/api/stats/record",
     "/api/stats/summary",
 ]:
     check(f"route registered: {route}", route in rules)
+
+# The local username/password auth was removed in favour of Supabase; those
+# routes wrote to a SQLite file, which a read-only serverless FS cannot do.
+for gone in ["/api/auth/signup", "/api/auth/login", "/api/auth/me"]:
+    check(f"dead auth route removed: {gone}", gone not in rules)
 
 print("\n-- problem API (no auth required) --")
 r = client.get("/api/health")
@@ -72,10 +75,45 @@ if r.status_code == 200:
 r = client.get("/api/problems/random?competition=AMC10&difficulty=bogus")
 check("bad difficulty -> 400", r.status_code == 400, r.status_code)
 
+print("\n-- image urls --")
+from serializers import _image_url
+
+check("None path -> None", _image_url(None) is None)
+check(
+    "flat path keeps its filename",
+    _image_url("images/AMC10A_2023_11.png") == "/api/images/AMC10A_2023_11.png",
+    _image_url("images/AMC10A_2023_11.png"),
+)
+# The 605 ICTM diagrams live in images/ictm/; flattening to a basename would
+# 404 as soon as ingestion starts attaching those paths.
+check(
+    "subdirectory is preserved",
+    _image_url("images/ictm/ICTM_2001_5.png") == "/api/images/ictm/ICTM_2001_5.png",
+    _image_url("images/ictm/ICTM_2001_5.png"),
+)
+check(
+    "windows separators normalize",
+    _image_url("images\\ictm\\ICTM_2001_5.png") == "/api/images/ictm/ICTM_2001_5.png",
+    _image_url("images\\ictm\\ICTM_2001_5.png"),
+)
+
 print("\n-- stats layer degrades safely without Supabase --")
+import os
+
 import stats
 
-check("stats client is lazy (unconfigured -> None)", stats.get_client() is None)
+# Assert the unconfigured behaviour explicitly rather than assuming this machine
+# has no credentials: a developer with a real .env must still see this pass.
+_saved = (os.environ.pop("SUPABASE_URL", None), os.environ.pop("SUPABASE_SERVICE_ROLE_KEY", None))
+_cached, stats._client = stats._client, None
+try:
+    check("stats client is lazy (unconfigured -> None)", stats.get_client() is None)
+finally:
+    stats._client = _cached
+    if _saved[0]:
+        os.environ["SUPABASE_URL"] = _saved[0]
+    if _saved[1]:
+        os.environ["SUPABASE_SERVICE_ROLE_KEY"] = _saved[1]
 r = client.post("/api/stats/record", json={})
 check("/api/stats/record unauthenticated -> 401", r.status_code == 401, r.status_code)
 r = client.get("/api/stats/summary")
