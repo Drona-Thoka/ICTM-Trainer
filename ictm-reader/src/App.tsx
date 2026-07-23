@@ -440,65 +440,21 @@ function Practice({ competition, difficulty, topic, events }: PracticeProps) {
 function ProfileAvatar({ user }: { user: any }) {
   const initials = user?.email ? getInitials(user.email) : 'U'
 
+  if (!user) {
+    return (
+      <Link to="/auth" className="profile-avatar" title="Sign in">
+        <span className="avatar-inner">{initials}</span>
+      </Link>
+    )
+  }
+
   return (
-    <Link
-      to="/auth"
-      className="profile-avatar"
-      title={user?.email || 'Sign in'}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-        background: user ? 'rgba(255,255,255,0.9)' : 'transparent',
-        padding: user ? '8px 18px 8px 10px' : '0',
-        borderRadius: '999px',
-        border: user ? '1px solid var(--border)' : 'none',
-        boxShadow: user ? 'var(--shadow)' : 'none',
-        textDecoration: 'none',
-        color: 'var(--text-h)',
-        transition: 'all 0.2s',
-        whiteSpace: 'nowrap',
-        minWidth: user ? '140px' : 'auto',
-        maxWidth: user ? '260px' : 'auto',
-      }}
-    >
-      <span
-        className="avatar-inner"
-        style={{
-          width: '36px',
-          height: '36px',
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #153E21 0%, #065f46 100%)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'white',
-          fontWeight: '700',
-          fontSize: '16px',
-          border: '2px solid #16a34a',
-          flexShrink: 0,
-        }}
-      >
-        {initials}
-      </span>
-      {user && (
-        <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.3', minWidth: 0, flex: 1 }}>
-          <span style={{ fontSize: '0.65rem', fontWeight: '600', opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Welcome,
-          </span>
-          <span
-            style={{
-              fontSize: '0.85rem',
-              fontWeight: '500',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              maxWidth: '180px',
-            }}
-          >
-            {user.email.split('@')[0]}
-          </span>
-        </div>
-      )}
+    <Link to="/auth" className="profile-avatar-card" title={user.email}>
+      <span className="avatar-inner">{initials}</span>
+      <div className="user-info">
+        <span className="welcome-label">Welcome,</span>
+        <span className="user-name">{user.email.split('@')[0]}</span>
+      </div>
     </Link>
   )
 }
