@@ -23,7 +23,7 @@ from serializers import serialize_problem, check_answer
 # Stats/accounts are optional: see stats.get_client(), which returns None when
 # Supabase isn't configured so the trainer still runs without it.
 import stats
-from stats import record_attempt, get_summary
+from stats import record_attempt, get_summary, set_attempt_correct
 
 
 def create_app() -> Flask:
@@ -262,6 +262,23 @@ def create_app() -> Flask:
             time_taken=body.get("time_taken"),
         )
         return jsonify(record), 201
+
+    @app.post("/api/stats/attempts/<attempt_id>/override")
+    def override_attempt(attempt_id):
+        """Make the Quizlet-style self-grade override permanent.
+
+        The attempt is recorded with the checker's verdict the moment the answer
+        is submitted; if the user then says "I was correct", this amends that row
+        so the stored accuracy matches what they see on screen.
+        """
+        user_id = get_user_id_from_token()
+        if not user_id:
+            return jsonify({"error": "Unauthorized"}), 401
+
+        record = set_attempt_correct(user_id, attempt_id)
+        if not record:
+            return jsonify({"error": "No such attempt for this user."}), 404
+        return jsonify(record), 200
 
     @app.get("/api/stats/summary")
     def stats_summary():

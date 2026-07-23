@@ -44,6 +44,26 @@ def record_attempt(user_id: str, problem_id: int, competition: str, topic: str,
     return result.data[0] if result.data else {}
 
 
+def set_attempt_correct(user_id: str, attempt_id, correct: bool = True) -> dict:
+    """Amend a recorded attempt's `correct` flag — the self-grade override.
+
+    Scoped by user_id as well as id so a caller can only amend their own rows.
+    The backend uses the service-role key, which bypasses row-level security,
+    so this filter is the only thing enforcing ownership.
+
+    Returns {} when no row matched (wrong id, or someone else's attempt).
+    """
+    result = (
+        get_client()
+        .table("user_stats")
+        .update({"correct": correct})
+        .eq("id", attempt_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    return result.data[0] if result.data else {}
+
+
 def get_summary(user_id: str) -> dict:
     """
     Fetch aggregated stats for a user.

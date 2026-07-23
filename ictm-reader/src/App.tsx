@@ -122,6 +122,8 @@ function Practice({ competition, difficulty, topic, event }: PracticeProps) {
   const [result, setResult] = useState<CheckResult | null>(null)
   const [overridden, setOverridden] = useState(false)
   const [checking, setChecking] = useState(false)
+  // id of the recorded stats row for this attempt, so an override can amend it
+  const [attemptId, setAttemptId] = useState<string | number | null>(null)
 
   const [score, setScore] = useState({ correct: 0, total: 0 })
 
@@ -157,6 +159,7 @@ function Practice({ competition, difficulty, topic, event }: PracticeProps) {
     setAnswer('')
     setResult(null)
     setOverridden(false)
+    setAttemptId(null)
 
     const params = new URLSearchParams({ competition })
     const tier = toTier(difficulty)
@@ -205,7 +208,7 @@ function Practice({ competition, difficulty, topic, event }: PracticeProps) {
         const session = (await supabase.auth.getSession()).data.session
         if (session) {
           const token = session.access_token
-          await fetch('/api/stats/record', {
+          const rec = await fetch('/api/stats/record', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -219,6 +222,11 @@ function Practice({ competition, difficulty, topic, event }: PracticeProps) {
               correct: data.correct,
             }),
           })
+          // Keep the row id so a later self-grade override can amend it.
+          if (rec.ok) {
+            const saved = await rec.json()
+            if (saved?.id != null) setAttemptId(saved.id)
+          }
         }
       } catch (e) {
         // Ignore errors – don't block the user experience
@@ -234,10 +242,25 @@ function Practice({ competition, difficulty, topic, event }: PracticeProps) {
   }
 
   // Quizlet-style self-grade override: count a wrong-marked answer as correct.
-  function markCorrect() {
+  // The attempt was already recorded with the checker's verdict, so amend that
+  // row too — otherwise the saved accuracy disagrees with the score on screen.
+  async function markCorrect() {
     if (!result || result.correct || overridden) return
     setOverridden(true)
     setScore((s) => ({ ...s, correct: s.correct + 1 }))
+
+    if (attemptId == null) return
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      if (!session) return
+      await fetch(`/api/stats/attempts/${encodeURIComponent(String(attemptId))}/override`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+    } catch (e) {
+      // Never block the UI on stats bookkeeping.
+      console.warn('Failed to persist override:', e)
+    }
   }
 
   const graded = result !== null

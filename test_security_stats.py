@@ -146,8 +146,33 @@ class _Insert:
         self._data = data
 
     def execute(self):
-        self._store.setdefault(self._name, []).append(self._data)
-        return _Result([self._data])
+        row = dict(self._data)
+        rows = self._store.setdefault(self._name, [])
+        row["id"] = len(rows) + 1  # Supabase returns the generated row id
+        rows.append(row)
+        return _Result([row])
+
+
+class _Update:
+    """.update(values).eq(...).eq(...).execute() — filters accumulate."""
+
+    def __init__(self, rows, values, filters=None):
+        self._rows = rows
+        self._values = values
+        self._filters = filters or {}
+
+    def eq(self, key, value):
+        return _Update(self._rows, self._values, {**self._filters, key: value})
+
+    def execute(self):
+        matched = [
+            r for r in self._rows
+            # the id arrives from a URL path segment, so compare as strings
+            if all(str(r.get(k)) == str(v) for k, v in self._filters.items())
+        ]
+        for r in matched:
+            r.update(self._values)
+        return _Result(matched)
 
 
 class _Table:
@@ -157,6 +182,9 @@ class _Table:
 
     def insert(self, data):
         return _Insert(self._store, self._name, data)
+
+    def update(self, values):
+        return _Update(self._store.setdefault(self._name, []), values)
 
     def select(self, cols):
         return _Query(self._store.get(self._name, [])).select(cols)
@@ -236,6 +264,42 @@ fake.store["user_stats"].append(
 r = client.get("/api/stats/summary", headers=auth_hdr)
 check("summary stays scoped to the caller", r.get_json()["overall"]["attempts"] == 4,
       r.get_json()["overall"])
+
+print("\n-- stats: the self-grade override is permanent --")
+
+# Record a wrong answer, then override it the way the UI does.
+r = client.post("/api/stats/record", headers=auth_hdr,
+                json={"problem_id": 2001, "competition": "AIME", "topic": "Algebra",
+                      "difficulty": "hard", "correct": False})
+saved = r.get_json()
+check("record returns a row id to amend later", saved.get("id") is not None, saved)
+
+before = client.get("/api/stats/summary", headers=auth_hdr).get_json()["overall"]
+
+r = client.post(f"/api/stats/attempts/{saved['id']}/override", headers=auth_hdr)
+check("override -> 200", r.status_code == 200, r.status_code)
+check("row is now marked correct", r.get_json().get("correct") is True, r.get_json())
+
+after = client.get("/api/stats/summary", headers=auth_hdr).get_json()["overall"]
+check("stored correct count went up by one",
+      after["correct"] == before["correct"] + 1, (before, after))
+check("attempt count unchanged (amended, not duplicated)",
+      after["attempts"] == before["attempts"], (before, after))
+
+# Ownership: the override must not reach another user's attempt.
+fake.store["user_stats"].append(
+    {"id": 999, "user_id": OTHER_ID, "competition": "AMC10", "topic": "Algebra",
+     "difficulty": "easy", "correct": False}
+)
+r = client.post("/api/stats/attempts/999/override", headers=auth_hdr)
+check("cannot override another user's attempt -> 404", r.status_code == 404, r.status_code)
+check("that row is untouched",
+      fake.store["user_stats"][-1]["correct"] is False, fake.store["user_stats"][-1])
+
+r = client.post("/api/stats/attempts/12345/override", headers=auth_hdr)
+check("unknown attempt id -> 404", r.status_code == 404, r.status_code)
+r = client.post("/api/stats/attempts/1/override")
+check("override without a token -> 401", r.status_code == 401, r.status_code)
 
 print("\n-- stats: input validation --")
 r = client.post("/api/stats/record", headers=auth_hdr,
