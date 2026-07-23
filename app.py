@@ -1,5 +1,5 @@
 ﻿"""
-app.py â€” JSON API for the ICTM-Trainer web app.
+app.py — JSON API for the ICTM-Trainer web app.
 
 Read-only Flask service over the (separate, still-ingesting) problem bank at
 ../il-math-problem-bank. Serves problems, filters them by
@@ -43,7 +43,7 @@ def create_app() -> Flask:
         """Extract the user ID from the Authorization: Bearer <token> header.
 
         Returns None when the header is missing/invalid or Supabase isn't
-        configured â€” callers treat that as "not authenticated".
+        configured — callers treat that as "not authenticated".
         """
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
@@ -86,7 +86,7 @@ def create_app() -> Flask:
 
     @app.get("/api/years")
     def years():
-        """Year range available for a competition â€” drives the year slider."""
+        """Year range available for a competition — drives the year slider."""
         competition = request.args.get("competition")
         if not competition:
             return jsonify(error="Query param 'competition' is required."), 400

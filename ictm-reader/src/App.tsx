@@ -4,6 +4,7 @@ import MathText from './MathText'
 import './App.css'
 import Auth from './Auth'
 import StatsPage from './StatsPage'
+import ResetPassword from './ResetPassword'
 import { supabase } from './supabaseClient'
 import { ThemeProvider, useTheme } from './ThemeContext'
 
@@ -915,6 +916,9 @@ function App() {
           <Route path="/" element={<Home user={user} />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/stats" element={<StatsPage />} />
+          {/* Reached by a hard page load from the reset email, so production
+              hosting needs an SPA catch-all rewrite or this 404s. */}
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route
             path="/comp-amc10"
             element={

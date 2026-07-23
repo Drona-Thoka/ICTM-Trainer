@@ -13,7 +13,7 @@ type Summary = {
 export default function StatsPage() {
   const [data, setData] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
-  // Distinguish "signed out" from "the request failed" â€” both used to render
+  // Distinguish "signed out" from "the request failed" — both used to render
   // the same misleading "sign in" message.
   const [signedIn, setSignedIn] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -57,7 +57,7 @@ export default function StatsPage() {
     }
   }, [])
 
-  if (loading) return <div style={{ padding: 40 }}>Loading statsâ€¦</div>
+  if (loading) return <div style={{ padding: 40 }}>Loading stats…</div>
 
   if (!signedIn) {
     return (
@@ -90,7 +90,7 @@ export default function StatsPage() {
       <section style={{ padding: '40px 20px', textAlign: 'center' }}>
         <div className="hero-card" style={{ maxWidth: 520, margin: '0 auto' }}>
           <h1 style={{ marginTop: 0 }}>Your Progress</h1>
-          <p>No data yet â€” answer a few problems and your stats will appear here.</p>
+          <p>No data yet — answer a few problems and your stats will appear here.</p>
           <Link to="/comp-amc10" className="nav-button primary">Start practicing</Link>
         </div>
       </section>
