@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Route, Routes } from 'react-router-dom'
 import MathText from './MathText'
 import './App.css'
@@ -122,8 +122,11 @@ function Practice({ competition, difficulty, topic, event }: PracticeProps) {
   const [result, setResult] = useState<CheckResult | null>(null)
   const [overridden, setOverridden] = useState(false)
   const [checking, setChecking] = useState(false)
-  // id of the recorded stats row for this attempt, so an override can amend it
-  const [attemptId, setAttemptId] = useState<string | number | null>(null)
+  // The in-flight "record this attempt" request. Held as a promise rather than
+  // state because getSession() can stall for seconds refreshing the token, and
+  // the override button is clickable the moment the result renders — a click in
+  // that window would otherwise find no row id and silently do nothing.
+  const recordRef = useRef<Promise<string | number | null> | null>(null)
 
   const [score, setScore] = useState({ correct: 0, total: 0 })
 
@@ -159,7 +162,7 @@ function Practice({ competition, difficulty, topic, event }: PracticeProps) {
     setAnswer('')
     setResult(null)
     setOverridden(false)
-    setAttemptId(null)
+    recordRef.current = null
 
     const params = new URLSearchParams({ competition })
     const tier = toTier(difficulty)
@@ -189,6 +192,35 @@ function Practice({ competition, difficulty, topic, event }: PracticeProps) {
     }
   }
 
+  // Saves the attempt for signed-in users and resolves to its row id (null when
+  // signed out or the save failed). Never throws — stats must not break practice.
+  async function recordAttempt(p: Problem, correct: boolean): Promise<string | number | null> {
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      if (!session) return null
+      const rec = await fetch('/api/stats/record', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          problem_id: p.problem_id,
+          competition: p.competition,
+          topic: p.topics[0] || 'Unknown',
+          difficulty: p.difficulty,
+          correct,
+        }),
+      })
+      if (!rec.ok) return null
+      const saved = await rec.json()
+      return saved?.id ?? null
+    } catch (e) {
+      console.warn('Failed to record stats:', e)
+      return null
+    }
+  }
+
   async function submitAnswer() {
     if (!problem || !answer.trim() || result) return
     setChecking(true)
@@ -203,37 +235,9 @@ function Practice({ competition, difficulty, topic, event }: PracticeProps) {
       setResult(data)
       setScore((s) => ({ correct: s.correct + (data.correct ? 1 : 0), total: s.total + 1 }))
 
-      // ---- Record stats ----
-      try {
-        const session = (await supabase.auth.getSession()).data.session
-        if (session) {
-          const token = session.access_token
-          const rec = await fetch('/api/stats/record', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              problem_id: problem.problem_id,
-              competition: problem.competition,
-              topic: problem.topics[0] || 'Unknown',
-              difficulty: problem.difficulty,
-              correct: data.correct,
-            }),
-          })
-          // Keep the row id so a later self-grade override can amend it.
-          if (rec.ok) {
-            const saved = await rec.json()
-            if (saved?.id != null) setAttemptId(saved.id)
-          }
-        }
-      } catch (e) {
-        // Ignore errors – don't block the user experience
-        console.warn('Failed to record stats:', e)
-      }
-      // ---- End stats recording ----
-
+      // Record the attempt. Kicked off without awaiting so a slow token
+      // refresh never delays the UI; markCorrect() awaits this same promise.
+      recordRef.current = recordAttempt(problem, data.correct)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error')
     } finally {
@@ -249,8 +253,10 @@ function Practice({ competition, difficulty, topic, event }: PracticeProps) {
     setOverridden(true)
     setScore((s) => ({ ...s, correct: s.correct + 1 }))
 
-    if (attemptId == null) return
     try {
+      // The attempt may still be saving; wait for its id rather than giving up.
+      const attemptId = await recordRef.current
+      if (attemptId == null) return
       const session = (await supabase.auth.getSession()).data.session
       if (!session) return
       await fetch(`/api/stats/attempts/${encodeURIComponent(String(attemptId))}/override`, {

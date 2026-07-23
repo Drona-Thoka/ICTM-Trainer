@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import './App.css'
@@ -13,7 +13,7 @@ type Summary = {
 export default function StatsPage() {
   const [data, setData] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
-  // Distinguish "signed out" from "the request failed" — both used to render
+  // Distinguish "signed out" from "the request failed" â€” both used to render
   // the same misleading "sign in" message.
   const [signedIn, setSignedIn] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -57,7 +57,7 @@ export default function StatsPage() {
     }
   }, [])
 
-  if (loading) return <div style={{ padding: 40 }}>Loading stats…</div>
+  if (loading) return <div style={{ padding: 40 }}>Loading statsâ€¦</div>
 
   if (!signedIn) {
     return (
@@ -90,7 +90,7 @@ export default function StatsPage() {
       <section style={{ padding: '40px 20px', textAlign: 'center' }}>
         <div className="hero-card" style={{ maxWidth: 520, margin: '0 auto' }}>
           <h1 style={{ marginTop: 0 }}>Your Progress</h1>
-          <p>No data yet — answer a few problems and your stats will appear here.</p>
+          <p>No data yet â€” answer a few problems and your stats will appear here.</p>
           <Link to="/comp-amc10" className="nav-button primary">Start practicing</Link>
         </div>
       </section>
@@ -102,16 +102,18 @@ export default function StatsPage() {
       <h1 style={{ textAlign: 'center' }}>Your Progress</h1>
 
       {/* Summary Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 40 }}>
-        <div className="hero-card" style={{ textAlign: 'center' }}>
+      {/* Fixed 3 columns, not auto-fit: the headline numbers should always read
+          as one horizontal row rather than reflowing onto separate lines. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 40 }}>
+        <div className="hero-card" style={{ textAlign: 'center', padding: '20px 12px' }}>
           <div style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--text-h)', opacity: 0.7 }}>Attempts</div>
           <div style={{ fontSize: '2.5rem', fontWeight: 700, color: 'var(--accent)' }}>{overall.attempts}</div>
         </div>
-        <div className="hero-card" style={{ textAlign: 'center' }}>
+        <div className="hero-card" style={{ textAlign: 'center', padding: '20px 12px' }}>
           <div style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--text-h)', opacity: 0.7 }}>Correct</div>
           <div style={{ fontSize: '2.5rem', fontWeight: 700, color: 'var(--accent)' }}>{overall.correct}</div>
         </div>
-        <div className="hero-card" style={{ textAlign: 'center' }}>
+        <div className="hero-card" style={{ textAlign: 'center', padding: '20px 12px' }}>
           <div style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--text-h)', opacity: 0.7 }}>Accuracy</div>
           <div style={{ fontSize: '2.5rem', fontWeight: 700, color: 'var(--accent)' }}>{overall.accuracy}%</div>
         </div>
