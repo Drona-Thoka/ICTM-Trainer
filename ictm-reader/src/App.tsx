@@ -3,6 +3,8 @@ import { Link, Route, Routes } from 'react-router-dom'
 import MathText from './MathText'
 import './App.css'
 import Auth from './Auth'
+import { supabase } from './supabaseClient'
+import { ThemeProvider, useTheme } from './ThemeContext'
 
 // ---- API types (see ICTM-Trainer/app.py) ---------------------------------
 
@@ -75,6 +77,16 @@ function toTier(label: string | null): 'easy' | 'medium' | 'hard' | null {
   if (l === 'q3' || l === 'q4') return 'medium'
   if (l === 'q5') return 'hard'
   return null
+}
+
+// Helper: get initials from email
+function getInitials(email: string): string {
+  return email
+    .split('@')[0]
+    .split('.')
+    .map((p) => p[0]?.toUpperCase())
+    .join('')
+    .slice(0, 2)
 }
 
 // ---- Practice widget (real problems, answer checking, LaTeX) --------------
@@ -275,9 +287,9 @@ function Practice({ competition, difficulty, topic, event }: PracticeProps) {
                   <p className="result-headline">
                     {isCorrect
                       ? overridden
-                        ? 'Counted as correct ✓ (you overrode)'
-                        : 'Correct! ✓'
-                      : 'Incorrect ✗'}
+                        ? 'Counted as correct (you overrode)'
+                        : 'Correct!'
+                      : 'Incorrect'}
                   </p>
                   <p className="result-answer">
                     Answer: <MathText math>{result!.correct_answer}</MathText>
@@ -311,22 +323,213 @@ function Practice({ competition, difficulty, topic, event }: PracticeProps) {
   )
 }
 
+// ---- Profile Avatar (top-left header with mini welcome card) -------------
+
+function ProfileAvatar({ user }: { user: any }) {
+  const initials = user?.email ? getInitials(user.email) : 'U'
+
+  return (
+    <Link
+      to="/auth"
+      className="profile-avatar"
+      title={user?.email || 'Sign in'}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        background: user ? 'rgba(255,255,255,0.9)' : 'transparent',
+        padding: user ? '8px 18px 8px 10px' : '0',
+        borderRadius: '999px',
+        border: user ? '1px solid var(--border)' : 'none',
+        boxShadow: user ? 'var(--shadow)' : 'none',
+        textDecoration: 'none',
+        color: 'var(--text-h)',
+        transition: 'all 0.2s',
+        whiteSpace: 'nowrap',
+        minWidth: user ? '140px' : 'auto',
+        maxWidth: user ? '260px' : 'auto',
+      }}
+    >
+      <span
+        className="avatar-inner"
+        style={{
+          width: '36px',
+          height: '36px',
+          borderRadius: '50%',
+          background: 'linear-gradient(135deg, #153E21 0%, #065f46 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'white',
+          fontWeight: '700',
+          fontSize: '16px',
+          border: '2px solid #16a34a',
+          flexShrink: 0,
+        }}
+      >
+        {initials}
+      </span>
+      {user && (
+        <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.3', minWidth: 0, flex: 1 }}>
+          <span style={{ fontSize: '0.65rem', fontWeight: '600', opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Welcome,
+          </span>
+          <span
+            style={{
+              fontSize: '0.85rem',
+              fontWeight: '500',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              maxWidth: '180px',
+            }}
+          >
+            {user.email.split('@')[0]}
+          </span>
+        </div>
+      )}
+    </Link>
+  )
+}
+
+// ---- Theme Toggle (moved before App) --------------------------------------
+
+type Theme = 'light' | 'dark' | 'system'
+
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme()
+  const [isOpen, setIsOpen] = useState(false)
+
+  const options: Theme[] = ['light', 'dark', 'system']
+  const labels: Record<Theme, string> = { light: 'Light', dark: 'Dark', system: 'System' }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          background: 'transparent',
+          border: '1px solid var(--border)',
+          borderRadius: '999px',
+          padding: '6px 12px',
+          cursor: 'pointer',
+          fontSize: '0.9rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          color: 'var(--text-h)',
+        }}
+      >
+        <span style={{ fontSize: '0.75rem', fontWeight: '600' }}>
+          {labels[theme]}
+        </span>
+      </button>
+      {isOpen && (
+        <div
+          style={{
+            position: 'absolute',
+            right: 0,
+            top: 'calc(100% + 8px)',
+            background: 'var(--bg)',
+            border: '1px solid var(--border)',
+            borderRadius: '12px',
+            boxShadow: 'var(--shadow)',
+            padding: '6px 0',
+            minWidth: '140px',
+            zIndex: 100,
+          }}
+        >
+          {options.map((opt) => (
+            <button
+              key={opt}
+              onClick={() => {
+                setTheme(opt)
+                setIsOpen(false)
+              }}
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '8px 16px',
+                background: 'transparent',
+                border: 'none',
+                textAlign: 'left',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                color: theme === opt ? 'var(--accent)' : 'var(--text-h)',
+                fontWeight: theme === opt ? '700' : '400',
+              }}
+            >
+              {labels[opt]}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ---- Home ----------------------------------------------------------------
 
-function Home() {
+function Home({ user }: { user: any }) {
+  async function handleSignOut() {
+    await supabase.auth.signOut()
+  }
+
   return (
     <section id="home-page" className="home-hero">
-      <div className="hero-card">
-        <h1>Learn AMC, AIME, NSML, ICTM, and ARML Tryouts.</h1>
-        <p className="hero-copy">
-          Practice real past-contest problems by competition, topic, and difficulty. Answer, check
-          your work, and reveal full solutions. Pick a competition below to begin.
-        </p>
-        <div className="hero-actions">
-          <Link to="/comp-amc10" className="nav-button primary">
-            Start with AMC 10
-          </Link>
-        </div>
+      <div className="hero-card" style={{ textAlign: 'left' }}>
+        {user ? (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '24px' }}>
+              <div
+                style={{
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #153E21 0%, #065f46 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  fontWeight: '700',
+                  fontSize: '24px',
+                  flexShrink: 0,
+                  border: '2px solid #16a34a',
+                }}
+              >
+                {getInitials(user.email)}
+              </div>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: '1.2rem', fontWeight: '600', color: 'var(--text-h)' }}>
+                  Welcome,
+                </div>
+                <div style={{ fontSize: '1.1rem', color: 'var(--text-h)', wordBreak: 'break-word' }}>
+                  {user.email}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
+              <Link to="/comp-amc10" className="nav-button primary">
+                Start with AMC 10
+              </Link>
+              <button className="nav-button" onClick={handleSignOut}>
+                Sign out
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <h1 style={{ marginTop: 0 }}>Learn AMC, AIME, NSML, ICTM, and ARML Tryouts.</h1>
+            <p className="hero-copy">
+              Practice real past-contest problems by competition, topic, and difficulty. Answer, check
+              your work, and reveal full solutions. Pick a competition below to begin.
+            </p>
+            <div className="hero-actions" style={{ justifyContent: 'center' }}>
+              <Link to="/comp-amc10" className="nav-button primary">
+                Start with AMC 10
+              </Link>
+            </div>
+          </>
+        )}
       </div>
     </section>
   )
@@ -529,87 +732,118 @@ function IctmPage({ title, description }: { title: string; description: string }
 // ---- App shell -----------------------------------------------------------
 
 function App() {
-  return (
-    <div className="app-shell">
-      <header className="app-header">
-        <div className="brand-block">
-          <div className="brand">ICTM Trainer</div>
-          <div className="brand-subtitle">Math competition practice hub</div>
-        </div>
-      </header>
-      <nav className="comps-nav">
-        <Link to="/comp-amc10" className="nav-button">AMC 10</Link>
-        <Link to="/comp-amc12" className="nav-button">AMC 12</Link>
-        <Link to="/comp-aime" className="nav-button">AIME</Link>
-        <Link to="/comp-nsml" className="nav-button">NSML</Link>
-        <Link to="/comp-ictm" className="nav-button">ICTM</Link>
-        <Link to="/comp-arml" className="nav-button">ARML Tryouts</Link>
-        <Link to="/auth" className="nav-button">Account</Link>
-      </nav>
+  const [user, setUser] = useState<any>(null)
 
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/auth" element={<Auth />} />
-        <Route
-          path="/comp-amc10"
-          element={
-            <CompPage
-              title="AMC 10"
-              competition="AMC10"
-              description="The AMC 10 is a 25‑question, 75‑minute multiple‑choice national exam for 9th and 10th graders covering algebra, geometry, number theory, and combinatorics, with top performers qualifying for the AIME."
-            />
-          }
-        />
-        <Route
-          path="/comp-amc12"
-          element={
-            <CompPage
-              title="AMC 12"
-              competition="AMC12"
-              description="The AMC 12 follows the same format as the AMC 10 but includes pre‑calculus topics such as trigonometry and logarithms, making it the primary qualifying route for upperclassmen to reach the AIME."
-            />
-          }
-        />
-        <Route
-          path="/comp-aime"
-          element={
-            <CompPage
-              title="AIME"
-              competition="AIME"
-              description="The AIME is an invitation‑only, 15‑problem, 3‑hour exam that requires integer answers from 0 to 999 and serves as the crucial bridge from the AMC to the USAJMO and USAMO."
-            />
-          }
-        />
-        <Route
-          path="/comp-nsml"
-          element={
-            <NsmlPage
-              title="NSML"
-              description="The North Suburban Math League is an Illinois‑based series of team and individual meets held throughout the school year that fosters collaborative problem‑solving across a wide range of mathematical topics."
-            />
-          }
-        />
-        <Route
-          path="/comp-ictm"
-          element={
-            <IctmPage
-              title="ICTM"
-              description="The Illinois Council of Teachers of Mathematics runs a large state‑wide competition with separate Frosh/Soph and Junior/Senior brackets, featuring both individual tests and team challenges to recognize excellence at every high‑school level."
-            />
-          }
-        />
-        <Route
-          path="/comp-arml"
-          element={
-            <CompPage
-              title="ARML Tryouts"
-              competition="ARML"
-              description="The ARML tryouts are a rigorous qualifying exam that selects top students for the national ARML team, testing advanced problem‑solving through a mix of individual and team‑based rounds across algebra, geometry, number theory, and combinatorics."
-            />
-          }
-        />
-      </Routes>
-    </div>
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      const { data } = await supabase.auth.getUser()
+      if (!mounted) return
+      setUser(data.user ?? null)
+    })()
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (mounted) setUser(session?.user ?? null)
+    })
+    return () => {
+      mounted = false
+      try {
+        const s = (sub as any)?.subscription ?? sub
+        if (s && typeof s.unsubscribe === 'function') s.unsubscribe()
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, [])
+
+  return (
+    <ThemeProvider>
+      <div className="app-shell">
+        <header className="app-header" style={{ justifyContent: 'center', position: 'relative' }}>
+          <div style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)' }}>
+            <ProfileAvatar user={user} />
+          </div>
+          <div className="brand-block">
+            <div className="brand">ICTM Trainer</div>
+            <div className="brand-subtitle">Math competition practice hub</div>
+          </div>
+          <div style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)' }}>
+            <ThemeToggle />
+          </div>
+        </header>
+
+        <nav className="comps-nav">
+          <Link to="/comp-amc10" className="nav-button">AMC 10</Link>
+          <Link to="/comp-amc12" className="nav-button">AMC 12</Link>
+          <Link to="/comp-aime" className="nav-button">AIME</Link>
+          <Link to="/comp-nsml" className="nav-button">NSML</Link>
+          <Link to="/comp-ictm" className="nav-button">ICTM</Link>
+          <Link to="/comp-arml" className="nav-button">ARML Tryouts</Link>
+        </nav>
+
+        <Routes>
+          <Route path="/" element={<Home user={user} />} />
+          <Route path="/auth" element={<Auth />} />
+          <Route
+            path="/comp-amc10"
+            element={
+              <CompPage
+                title="AMC 10"
+                competition="AMC10"
+                description="The AMC 10 is a 25‑question, 75‑minute multiple‑choice national exam for 9th and 10th graders covering algebra, geometry, number theory, and combinatorics, with top performers qualifying for the AIME."
+              />
+            }
+          />
+          <Route
+            path="/comp-amc12"
+            element={
+              <CompPage
+                title="AMC 12"
+                competition="AMC12"
+                description="The AMC 12 follows the same format as the AMC 10 but includes pre‑calculus topics such as trigonometry and logarithms, making it the primary qualifying route for upperclassmen to reach the AIME."
+              />
+            }
+          />
+          <Route
+            path="/comp-aime"
+            element={
+              <CompPage
+                title="AIME"
+                competition="AIME"
+                description="The AIME is an invitation‑only, 15‑problem, 3‑hour exam that requires integer answers from 0 to 999 and serves as the crucial bridge from the AMC to the USAJMO and USAMO."
+              />
+            }
+          />
+          <Route
+            path="/comp-nsml"
+            element={
+              <NsmlPage
+                title="NSML"
+                description="The North Suburban Math League is an Illinois‑based series of team and individual meets held throughout the school year that fosters collaborative problem‑solving across a wide range of mathematical topics."
+              />
+            }
+          />
+          <Route
+            path="/comp-ictm"
+            element={
+              <IctmPage
+                title="ICTM"
+                description="The Illinois Council of Teachers of Mathematics runs a large state‑wide competition with separate Frosh/Soph and Junior/Senior brackets, featuring both individual tests and team challenges to recognize excellence at every high‑school level."
+              />
+            }
+          />
+          <Route
+            path="/comp-arml"
+            element={
+              <CompPage
+                title="ARML Tryouts"
+                competition="ARML"
+                description="The ARML tryouts are a rigorous qualifying exam that selects top students for the national ARML team, testing advanced problem‑solving through a mix of individual and team‑based rounds across algebra, geometry, number theory, and combinatorics."
+              />
+            }
+          />
+        </Routes>
+      </div>
+    </ThemeProvider>
   )
 }
 
