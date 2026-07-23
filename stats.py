@@ -3,6 +3,8 @@ stats.py — Backend functions for recording and retrieving user stats.
 Uses Supabase as the database, with the user's JWT token for auth.
 """
 
+from __future__ import annotations  # `X | None` hints on older serverless Pythons
+
 import os
 from supabase import create_client, Client
 

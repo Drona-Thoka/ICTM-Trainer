@@ -6,6 +6,8 @@ Practice reads hide `answer` and `solution_text`; pass reveal=True (the check /
 solution endpoints) to include them.
 """
 
+from __future__ import annotations  # `X | None` hints on older serverless Pythons
+
 import json
 import sqlite3
 from pathlib import PurePosixPath

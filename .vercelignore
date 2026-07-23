@@ -1,0 +1,17 @@
+# Keep the upload (and therefore the serverless bundle) to what is needed.
+# vercel.json sets includeFiles:"**" for the Python function so the root modules
+# and data/problems.db are definitely bundled; these are the things that must
+# NOT come along.
+
+# Reinstalled by the build command.
+ictm-reader/node_modules
+
+# Built on Vercel, never uploaded.
+ictm-reader/dist
+
+# Local Python virtualenv.
+venv
+.venv
+
+__pycache__
+*.pyc

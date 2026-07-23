@@ -97,6 +97,35 @@ check(
     _image_url("images\\ictm\\ICTM_2001_5.png"),
 )
 
+print("\n-- deployment config --")
+from pathlib import Path
+
+import config
+
+_root = Path(__file__).resolve().parent
+_snapshot = _root / "data" / "problems.db"
+check("committed DB snapshot exists", _snapshot.is_file(), _snapshot)
+# On Vercel the separate bank repo does not exist, so the snapshot is the only
+# data source; this is the fallback that makes that work with no env vars.
+check(
+    "falls back to the snapshot when the bank is absent",
+    config._resolve("__UNSET__", _root / "no-such-bank" / "problems.db", _snapshot)
+    == _snapshot.resolve(),
+)
+import os as _os
+
+_os.environ["__REL_TEST__"] = "data/problems.db"
+check(
+    "relative env paths resolve against the repo, not cwd",
+    config._resolve("__REL_TEST__", _root / "nope.db", None) == _snapshot.resolve(),
+)
+_os.environ.pop("__REL_TEST__", None)
+check("vercel entry point exists", (_root / "api" / "index.py").is_file())
+check("vercel.json exists", (_root / "vercel.json").is_file())
+# Not just *.png — the bank holds .jpeg too.
+_imgs = [p for p in (_root / "ictm-reader" / "public" / "images").rglob("*") if p.is_file()]
+check("diagram images are staged for the CDN", len(_imgs) > 900, len(_imgs))
+
 print("\n-- stats layer degrades safely without Supabase --")
 import os
 
