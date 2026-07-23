@@ -75,7 +75,18 @@ def create_app() -> Flask:
 
     @app.get("/api/topics")
     def topics():
-        return jsonify(queries.list_topics(get_db()))
+        """Topics with counts, optionally narrowed to a competition/event.
+
+        Returns only topics that have approved problems, so the frontend can
+        build dropdowns that always filter something.
+        """
+        return jsonify(
+            queries.list_topics(
+                get_db(),
+                competition=request.args.get("competition"),
+                event=request.args.get("event"),
+            )
+        )
 
     @app.get("/api/events")
     def events():

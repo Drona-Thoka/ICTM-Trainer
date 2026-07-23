@@ -48,9 +48,42 @@ def list_competitions(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     ).fetchall()
 
 
-def list_topics(conn: sqlite3.Connection) -> list[str]:
-    rows = conn.execute("SELECT name FROM topics ORDER BY name").fetchall()
-    return [r["name"] for r in rows]
+def list_topics(
+    conn: sqlite3.Connection,
+    competition: str | None = None,
+    event: str | None = None,
+) -> list[dict]:
+    """Topics that actually have approved problems, with counts.
+
+    Deliberately driven by problem_topics rather than the topics table: the bank
+    defines ~32 topics but only tags a handful, and a dropdown built from the
+    table alone offers filters that silently match nothing. Narrowing by
+    competition/event keeps each page's options honest.
+    """
+    clauses = ["p.review_status = 'approved'"]
+    params: list = []
+
+    if competition:
+        clauses.append("c.short_name = ?")
+        params.append(competition)
+    if event:
+        clauses.append("p.comp_event = ?")
+        params.append(event)
+
+    rows = conn.execute(
+        f"""
+        SELECT t.name AS name, COUNT(DISTINCT p.problem_id) AS count
+        FROM topics t
+        JOIN problem_topics pt ON pt.topic_id = t.topic_id
+        JOIN problems p ON p.problem_id = pt.problem_id
+        JOIN competitions c ON c.competition_id = p.competition_id
+        WHERE {' AND '.join(clauses)}
+        GROUP BY t.name
+        ORDER BY t.name
+        """,
+        params,
+    ).fetchall()
+    return [{"name": r["name"], "count": r["count"]} for r in rows]
 
 
 def list_events(conn: sqlite3.Connection, competition: str) -> list[str]:

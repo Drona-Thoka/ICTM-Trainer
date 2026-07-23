@@ -5,6 +5,7 @@ import './App.css'
 import Auth from './Auth'
 import StatsPage from './StatsPage'
 import ResetPassword from './ResetPassword'
+import { ALL_TOPICS, useEvents, useTopics } from './useFilterOptions'
 import { supabase } from './supabaseClient'
 import { ThemeProvider, useTheme } from './ThemeContext'
 
@@ -31,48 +32,45 @@ type CheckResult = {
   solution_text: string | null
 }
 
-// ---- Curated filter data (teammate's design, preserved) ------------------
-
-const topicOptions = ['All topics', 'Algebra', 'Geometry', 'Number Theory', 'Combinatorics', 'Precalculus', 'Advanced Math']
+// Filter options are fetched from the bank (see useFilterOptions.ts). The
+// curated topic/event lists that used to live here had drifted out of sync with
+// the data and silently filtered nothing; git history has them if the curated
+// taxonomy is ever revived.
 const gradeOptions = ['9', '10', '11', '12']
-
-const nsmlTopicsByGrade: Record<string, string[]> = {
-  '9': ['Number Bases', 'Counting Basics & Simple Probability', 'Basic Statistics', 'Systems of Equations & Quadratics'],
-  '10': ['Logic, Sets & Venn Diagrams', 'Geometric Probability', 'Circles', 'Surface Area & Volume (3D)'],
-  '11': ['Modular Arithmetic', 'Probability', 'Geometric Transformations (Matrices)', 'Theory of Polynomials'],
-  '12': ['Diophantine Equations', 'Probability', 'Vectors', 'Parametric Equations'],
-}
-
-const ictmTopicsByEvent: Record<string, string[]> = {
-  'Algebra I': ['All topics', 'Algebra Basics', 'Linear Equations'],
-  'Geometry': ['All topics', 'Geometry Basics', 'Triangles'],
-  'Algebra II': ['All topics', 'Algebra II', 'Quadratics'],
-  'Pre-Calculus': ['All topics', 'Pre-Calculus Review', 'Trigonometry'],
-  'Freshman-Sophomore 8 Person Team': ['All topics', 'Team Strategy', 'Relay Practice'],
-  'Junior-Senior 8 Person Team': ['All topics', 'Advanced Team Strategy', 'Team Logic'],
-  'Calculator Team': ['All topics', 'Calculator Techniques', 'Scientific Notation'],
-  'Freshman-Sophomore 2 Person Team': ['All topics', 'Fast Thinking', 'Short Answer Strategy'],
-  'Junior-Senior 2 Person Team': ['All topics', 'Advanced Fast Thinking', 'Tie-Breaker Strategy'],
-}
-
-// The event LABELS above are the teammate's; the database stores them slightly
-// differently. Map label -> DB comp_event so event filtering actually works.
-const ictmEventToDb: Record<string, string> = {
-  'Algebra I': 'Algebra I',
-  'Geometry': 'Geometry',
-  'Algebra II': 'Algebra II',
-  'Pre-Calculus': 'Precalculus',
-  'Freshman-Sophomore 8 Person Team': 'Frosh-Soph 8 Person',
-  'Junior-Senior 8 Person Team': 'Junior-Senior 8 Person',
-  'Calculator Team': 'Calculator Team',
-  'Freshman-Sophomore 2 Person Team': 'Frosh-Soph 2 Person',
-  'Junior-Senior 2 Person Team': 'Junior-Senior 2 Person',
-}
 
 // ICTM team events are graded as a whole round, so per-topic filtering is
 // meaningless there — the topic control is hidden for them.
 function isTeamEvent(event: string | null): boolean {
-  return !!event && event.toLowerCase().includes('team')
+  return !!event && /team|person/i.test(event)
+}
+
+/** Topic <select> driven by whatever the bank actually has tagged. */
+function TopicSelect({
+  competition,
+  event,
+  value,
+  onChange,
+}: {
+  competition: string
+  event?: string | null
+  value: string
+  onChange: (v: string) => void
+}) {
+  const topics = useTopics(competition, event)
+
+  return (
+    <label className="control-group">
+      <span>Topic</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value={ALL_TOPICS}>{ALL_TOPICS}</option>
+        {topics.map((t) => (
+          <option key={t.name} value={t.name}>
+            {t.name} ({t.count})
+          </option>
+        ))}
+      </select>
+    </label>
+  )
 }
 
 // Map each competition's native difficulty label onto the backend's tier param.
@@ -108,7 +106,6 @@ type PracticeProps = {
 }
 
 function Practice({ competition, difficulty, topic, event }: PracticeProps) {
-  const [realTopics, setRealTopics] = useState<Set<string>>(new Set())
 
   // Year range: bounds come from the data, so the slider widens as more
   // contests are ingested. null bounds = this competition has no year data.
@@ -130,14 +127,6 @@ function Practice({ competition, difficulty, topic, event }: PracticeProps) {
   const recordRef = useRef<Promise<string | number | null> | null>(null)
 
   const [score, setScore] = useState({ correct: 0, total: 0 })
-
-  // The real, filterable topic tags in the database.
-  useEffect(() => {
-    fetch('/api/topics')
-      .then((r) => r.json())
-      .then((ts: string[]) => setRealTopics(new Set(ts)))
-      .catch(() => setRealTopics(new Set()))
-  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -168,9 +157,8 @@ function Practice({ competition, difficulty, topic, event }: PracticeProps) {
     const params = new URLSearchParams({ competition })
     const tier = toTier(difficulty)
     if (tier) params.set('difficulty', tier)
-    // Apply the topic filter only when the selected label is a real DB tag;
-    // curated labels without tagged problems are ignored so a problem still loads.
-    if (topic && topic !== 'All topics' && realTopics.has(topic)) params.set('topic', topic)
+    // Options come from the bank, so any selection here is a real tag.
+    if (topic && topic !== ALL_TOPICS) params.set('topic', topic)
     if (event) params.set('event', event)
     // Only send the range when it's narrower than everything available.
     if (years && bounds && (years[0] > bounds.min || years[1] < bounds.max)) {
@@ -666,7 +654,7 @@ type Difficulty = (typeof difficulties)[number]
 
 function CompPage({ title, description, competition }: { title: string; description: string; competition: string }) {
   const [diff, setDiff] = useState<Difficulty>('all')
-  const [selectedTopic, setSelectedTopic] = useState('All topics')
+  const [selectedTopic, setSelectedTopic] = useState(ALL_TOPICS)
 
   return (
     <section id="comp-page">
@@ -687,16 +675,7 @@ function CompPage({ title, description, competition }: { title: string; descript
       </div>
 
       <div className="control-row">
-        <label className="control-group">
-          <span>Topic</span>
-          <select value={selectedTopic} onChange={(e) => setSelectedTopic(e.target.value)}>
-            {topicOptions.map((topic) => (
-              <option key={topic} value={topic}>
-                {topic}
-              </option>
-            ))}
-          </select>
-        </label>
+        <TopicSelect competition={competition} value={selectedTopic} onChange={setSelectedTopic} />
       </div>
 
       <Practice competition={competition} difficulty={diff} topic={selectedTopic} event={null} />
@@ -710,14 +689,15 @@ function CompPage({ title, description, competition }: { title: string; descript
   )
 }
 
-// ---- NSML (grade + Q1–Q5 + per-grade topics) ------------------------------
+// ---- NSML (grade + Q1–Q5 + topics) ----------------------------------------
 
 function NsmlPage({ title, description }: { title: string; description: string }) {
   const nsmlDiffs = ['All', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5']
   const [selectedDiff, setSelectedDiff] = useState<string>('All')
+  // The schema has no grade dimension, so this selects nothing today; kept
+  // because NSML data isn't ingested yet and grade is how the meets are run.
   const [selectedGrade, setSelectedGrade] = useState('10')
-  const nsmlTopicOptions = nsmlTopicsByGrade[selectedGrade] ?? topicOptions
-  const [selectedTopic, setSelectedTopic] = useState(nsmlTopicsByGrade['10'][0])
+  const [selectedTopic, setSelectedTopic] = useState(ALL_TOPICS)
 
   return (
     <section id="comp-page">
@@ -740,13 +720,7 @@ function NsmlPage({ title, description }: { title: string; description: string }
       <div className="control-row">
         <label className="control-group">
           <span>Grade</span>
-          <select
-            value={selectedGrade}
-            onChange={(e) => {
-              setSelectedGrade(e.target.value)
-              setSelectedTopic(nsmlTopicsByGrade[e.target.value]?.[0] ?? 'All topics')
-            }}
-          >
+          <select value={selectedGrade} onChange={(e) => setSelectedGrade(e.target.value)}>
             {gradeOptions.map((grade) => (
               <option key={grade} value={grade}>
                 Grade {grade}
@@ -754,16 +728,7 @@ function NsmlPage({ title, description }: { title: string; description: string }
             ))}
           </select>
         </label>
-        <label className="control-group">
-          <span>Topic</span>
-          <select value={selectedTopic} onChange={(e) => setSelectedTopic(e.target.value)}>
-            {nsmlTopicOptions.map((topic) => (
-              <option key={topic} value={topic}>
-                {topic}
-              </option>
-            ))}
-          </select>
-        </label>
+        <TopicSelect competition="NSML" value={selectedTopic} onChange={setSelectedTopic} />
       </div>
 
       <Practice competition="NSML" difficulty={selectedDiff} topic={selectedTopic} event={null} />
@@ -780,12 +745,13 @@ function NsmlPage({ title, description }: { title: string; description: string }
 // ---- ICTM (event + difficulty + per-event topics) -------------------------
 
 function IctmPage({ title, description }: { title: string; description: string }) {
-  const events = Object.keys(ictmTopicsByEvent)
+  // Real comp_event values from the bank — they carry the Regional/State split
+  // ("Regional Algebra I", "State Algebra I") that hardcoded labels missed.
+  const events = useEvents('ICTM')
   const [selected, setSelected] = useState<string | null>(null)
   const ictmDiffs = ['All', 'Easy', 'Medium', 'Hard']
   const [selectedDiff, setSelectedDiff] = useState<string>('All')
-  const [selectedTopic, setSelectedTopic] = useState('All topics')
-  const ictmTopicOptions = (selected && ictmTopicsByEvent[selected]) ? ictmTopicsByEvent[selected] : topicOptions
+  const [selectedTopic, setSelectedTopic] = useState(ALL_TOPICS)
 
   return (
     <section id="comp-page">
@@ -811,12 +777,11 @@ function IctmPage({ title, description }: { title: string; description: string }
           <select
             value={selected ?? ''}
             onChange={(e) => {
-              const val = e.target.value || null
-              setSelected(val)
-              setSelectedTopic(val ? (ictmTopicsByEvent[val]?.[0] ?? 'All topics') : 'All topics')
+              setSelected(e.target.value || null)
+              setSelectedTopic(ALL_TOPICS)
             }}
           >
-            <option value="">Select an event</option>
+            <option value="">All events</option>
             {events.map((e) => (
               <option key={e} value={e}>
                 {e}
@@ -827,16 +792,12 @@ function IctmPage({ title, description }: { title: string; description: string }
 
         {/* Team rounds are scored as a whole round, so they have no topic split. */}
         {!isTeamEvent(selected) && (
-          <label className="control-group">
-            <span>Topic</span>
-            <select value={selectedTopic} onChange={(e) => setSelectedTopic(e.target.value)}>
-              {ictmTopicOptions.map((topic) => (
-                <option key={topic} value={topic}>
-                  {topic}
-                </option>
-              ))}
-            </select>
-          </label>
+          <TopicSelect
+            competition="ICTM"
+            event={selected}
+            value={selectedTopic}
+            onChange={setSelectedTopic}
+          />
         )}
       </div>
 
@@ -844,7 +805,7 @@ function IctmPage({ title, description }: { title: string; description: string }
         competition="ICTM"
         difficulty={selectedDiff}
         topic={isTeamEvent(selected) ? null : selectedTopic}
-        event={selected ? (ictmEventToDb[selected] ?? null) : null}
+        event={selected}
       />
 
       <div className="button-row">
