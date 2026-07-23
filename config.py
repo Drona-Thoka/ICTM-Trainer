@@ -10,6 +10,8 @@ Override the defaults with environment variables:
     IMAGE_BASE_URL      — URL prefix the frontend uses for diagrams
 """
 
+from __future__ import annotations  # `X | None` hints on older serverless Pythons
+
 import os
 from pathlib import Path
 

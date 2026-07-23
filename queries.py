@@ -6,6 +6,8 @@ Every read of problems.db goes through here. The connection is opened read-only
 app must never write to it. Only review_status = 'approved' problems are served.
 """
 
+from __future__ import annotations  # `X | None` hints on older serverless Pythons
+
 import sqlite3
 from pathlib import Path
 
