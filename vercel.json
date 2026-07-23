@@ -1,0 +1,15 @@
+{
+  "buildCommand": "cd ictm-reader && npm install && npm run build",
+  "outputDirectory": "ictm-reader/dist",
+  "installCommand": "echo skip-root-install",
+  "functions": {
+    "api/index.py": {
+      "includeFiles": "{data/**,*.py}",
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

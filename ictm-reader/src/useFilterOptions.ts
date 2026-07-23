@@ -77,6 +77,31 @@ const EVENT_ALIASES: Record<string, string> = {
   'FS 8-Person': 'Frosh-Soph 8-Person Team',
 }
 
+// Curriculum order (individual rounds by course, then team rounds), not
+// alphabetical — "Algebra II" sorting next to "Algebra I" ahead of Geometry
+// reads wrong to anyone who knows the sequence. Anything unlisted sorts to the
+// end alphabetically, so newly ingested events still show up.
+const EVENT_ORDER = [
+  'Algebra I',
+  'Geometry',
+  'Algebra II',
+  'Precalculus',
+  'Frosh-Soph 8-Person Team',
+  'Junior-Senior 8-Person Team',
+  'Frosh-Soph 2-Person Team',
+  'Junior-Senior 2-Person Team',
+  'Calculator Team',
+]
+
+function byCurriculum(a: string, b: string): number {
+  const ia = EVENT_ORDER.indexOf(a)
+  const ib = EVENT_ORDER.indexOf(b)
+  if (ia === -1 && ib === -1) return a.localeCompare(b)
+  if (ia === -1) return 1
+  if (ib === -1) return -1
+  return ia - ib
+}
+
 /**
  * ICTM events are stored as one string that fuses two dimensions —
  * "Regional Algebra I", "State Precalculus". Split them so the UI can offer
@@ -100,7 +125,7 @@ export function useIctmEvents(): IctmEvents {
   })
 
   const levels = [...new Set(parsed.map((p) => p.level))].sort()
-  const eventNames = [...new Set(parsed.map((p) => p.name))].sort()
+  const eventNames = [...new Set(parsed.map((p) => p.name))].sort(byCurriculum)
 
   const resolve = (level: string, name: string) =>
     parsed

@@ -103,16 +103,22 @@ check("topics scope to the whole Regional set", all(x["count"] > 0 for x in t), 
 
 # 'Regional FS 8-Person' and 'Regional Frosh-Soph 8-Person Team' are the same
 # round under two ingestion names; the dropdown folds them into one option, so
-# selecting it must query both and reach the 9 problems under the odd name.
+# selecting it must query both and reach the problems under the odd name.
+#
+# Counted rather than sampled: the odd name holds only ~9 of the pair's ~454
+# problems, so drawing random problems and hoping to see it is a coin flip.
+def topic_total(*evs):
+    qs2 = "&".join(f"event={e.replace(' ', '%20')}" for e in evs)
+    body = client.get(f"/api/topics?competition=ICTM&{qs2}").get_json()
+    return sum(t["count"] for t in body)
+
+
 pair = ["Regional FS 8-Person", "Regional Frosh-Soph 8-Person Team"]
-if all(p in events for p in events if p in pair):
-    qs2 = "&".join(f"event={p.replace(' ', '%20')}" for p in pair)
-    seen = set()
-    for _ in range(30):
-        rr = client.get(f"/api/problems/random?competition=ICTM&{qs2}")
-        if rr.status_code == 200:
-            seen.add(rr.get_json()["event"])
-    check("aliased pair reaches both stored names", seen == set(pair), seen)
+if all(p in events for p in pair):
+    a, b = topic_total(pair[0]), topic_total(pair[1])
+    both = topic_total(*pair)
+    check("each name in the aliased pair has problems", a > 0 and b > 0, (a, b))
+    check("querying the pair covers both, not just one", both == a + b, (a, b, both))
 
 print("\n-- a topic with no problems is never offered --")
 r = client.get("/api/problems/random?competition=AIME&topic=Relay%20Practice")
