@@ -20,6 +20,11 @@ import config
 import queries
 from serializers import serialize_problem, check_answer
 
+# ---- New imports for stats ----
+import jwt as pyjwt
+from supabase import create_client
+from stats import record_attempt, get_summary
+
 
 def create_app() -> Flask:
     app = Flask(__name__)
@@ -59,6 +64,28 @@ def create_app() -> Flask:
         if auth_db is not None:
             auth_db.close()
 
+    # ---- Helper to get user ID from Supabase JWT ----
+def get_user_id_from_token():
+    """Extract the user ID from the Authorization: Bearer <token> header."""
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None
+    token = auth_header.split(" ")[1]
+    try:
+        url = os.environ.get("SUPABASE_URL")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        if not url or not key:
+            app.logger.error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY")
+            return None
+        supabase = create_client(url, key)
+        response = supabase.auth.get_user(token)
+        if response.user:
+            return response.user.id
+        return None
+    except Exception as e:
+        app.logger.debug(f"JWT verification failed: {e}")
+        return None
+        
     # ---- Meta ---------------------------------------------------------------
 
     @app.get("/api/health")
@@ -197,11 +224,47 @@ def create_app() -> Flask:
         # send_from_directory rejects path-traversal attempts.
         return send_from_directory(config.IMAGES_DIR, filename)
 
+    # ---- User Stats ---------------------------------------------------------
+
+    @app.post("/api/stats/record")
+    def record_stats():
+        user_id = get_user_id_from_token()
+        if not user_id:
+            return jsonify({"error": "Unauthorized"}), 401
+
+        body = request.get_json(silent=True) or {}
+        required = ["problem_id", "competition", "topic", "difficulty", "correct"]
+        for field in required:
+            if field not in body:
+                return jsonify({"error": f"Missing field: {field}"}), 400
+
+        if body["difficulty"] not in ("easy", "medium", "hard"):
+            return jsonify({"error": "Invalid difficulty"}), 400
+
+        record = record_attempt(
+            user_id=user_id,
+            problem_id=body["problem_id"],
+            competition=body["competition"],
+            topic=body["topic"],
+            difficulty=body["difficulty"],
+            correct=body["correct"],
+            time_taken=body.get("time_taken"),
+        )
+        return jsonify(record), 201
+
+    @app.get("/api/stats/summary")
+    def stats_summary():
+        user_id = get_user_id_from_token()
+        if not user_id:
+            return jsonify({"error": "Unauthorized"}), 401
+
+        summary = get_summary(user_id)
+        return jsonify(summary), 200
+
     return app
 
 
 app = create_app()
-
 
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5000, debug=True)

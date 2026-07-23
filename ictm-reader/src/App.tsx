@@ -3,6 +3,7 @@ import { Link, Route, Routes } from 'react-router-dom'
 import MathText from './MathText'
 import './App.css'
 import Auth from './Auth'
+import StatsPage from './StatsPage'
 import { supabase } from './supabaseClient'
 import { ThemeProvider, useTheme } from './ThemeContext'
 
@@ -164,6 +165,33 @@ function Practice({ competition, difficulty, topic, event }: PracticeProps) {
       const data: CheckResult = await res.json()
       setResult(data)
       setScore((s) => ({ correct: s.correct + (data.correct ? 1 : 0), total: s.total + 1 }))
+
+      // ---- Record stats ----
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        if (session) {
+          const token = session.access_token
+          await fetch('/api/stats/record', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              problem_id: problem.problem_id,
+              competition: problem.competition,
+              topic: problem.topics[0] || 'Unknown',
+              difficulty: problem.difficulty,
+              correct: data.correct,
+            }),
+          })
+        }
+      } catch (e) {
+        // Ignore errors – don't block the user experience
+        console.warn('Failed to record stats:', e)
+      }
+      // ---- End stats recording ----
+
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error')
     } finally {
@@ -518,7 +546,7 @@ function Home({ user }: { user: any }) {
           </>
         ) : (
           <>
-            <h1 style={{ marginTop: 0 }}>Learn AMC, AIME, NSML, ICTM, and ARML Tryouts.</h1>
+            <h1 style={{ marginTop: 0 }}>Learn AMC, AIME, NSML, and ICTM.</h1>
             <p className="hero-copy">
               Practice real past-contest problems by competition, topic, and difficulty. Answer, check
               your work, and reveal full solutions. Pick a competition below to begin.
@@ -535,7 +563,7 @@ function Home({ user }: { user: any }) {
   )
 }
 
-// ---- AMC 10 / AMC 12 / AIME / ARML (difficulty + topic) -------------------
+// ---- AMC 10 / AMC 12 / AIME (difficulty + topic) -------------------
 
 const difficulties = ['easy', 'medium', 'hard'] as const
 type Difficulty = (typeof difficulties)[number]
@@ -777,12 +805,12 @@ function App() {
           <Link to="/comp-aime" className="nav-button">AIME</Link>
           <Link to="/comp-nsml" className="nav-button">NSML</Link>
           <Link to="/comp-ictm" className="nav-button">ICTM</Link>
-          <Link to="/comp-arml" className="nav-button">ARML Tryouts</Link>
         </nav>
 
         <Routes>
           <Route path="/" element={<Home user={user} />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/stats" element={<StatsPage />} />
           <Route
             path="/comp-amc10"
             element={
@@ -828,16 +856,6 @@ function App() {
               <IctmPage
                 title="ICTM"
                 description="The Illinois Council of Teachers of Mathematics runs a large state‑wide competition with separate Frosh/Soph and Junior/Senior brackets, featuring both individual tests and team challenges to recognize excellence at every high‑school level."
-              />
-            }
-          />
-          <Route
-            path="/comp-arml"
-            element={
-              <CompPage
-                title="ARML Tryouts"
-                competition="ARML"
-                description="The ARML tryouts are a rigorous qualifying exam that selects top students for the national ARML team, testing advanced problem‑solving through a mix of individual and team‑based rounds across algebra, geometry, number theory, and combinatorics."
               />
             }
           />
