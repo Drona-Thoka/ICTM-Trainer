@@ -1,5 +1,5 @@
 # ICTM-Trainer
-Web application and discord bot to train for both Illinois and Nation wide math competitions. Covers ICTM events, NSML, AMC, AIME, ARML tryouts, and topic specific training. 
+Web application and discord bot to train for both Illinois and Nation wide math competitions. Covers ICTM events, NSML, AMC, AIME, and topic specific training. 
 
 ### Project Architecture (PHASE 1 - Discord Bot):
 
