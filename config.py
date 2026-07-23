@@ -31,3 +31,7 @@ DB_PATH = Path(
 IMAGES_DIR = Path(
     os.environ.get("PROBLEM_BANK_IMAGES", _DEFAULT_BANK_DIR / "images")
 ).resolve()
+
+AUTH_DB_PATH = Path(
+    os.environ.get("AUTH_DB_PATH", _BASE_DIR / "auth.db")
+).resolve()

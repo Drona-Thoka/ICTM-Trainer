@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, Route, Routes } from 'react-router-dom'
 import MathText from './MathText'
 import './App.css'
+import Auth from './Auth'
 
 // ---- API types (see ICTM-Trainer/app.py) ---------------------------------
 
@@ -543,10 +544,12 @@ function App() {
         <Link to="/comp-nsml" className="nav-button">NSML</Link>
         <Link to="/comp-ictm" className="nav-button">ICTM</Link>
         <Link to="/comp-arml" className="nav-button">ARML Tryouts</Link>
+        <Link to="/auth" className="nav-button">Account</Link>
       </nav>
 
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/auth" element={<Auth />} />
         <Route
           path="/comp-amc10"
           element={
