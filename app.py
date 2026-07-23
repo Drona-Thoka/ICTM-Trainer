@@ -55,16 +55,25 @@ def create_app() -> Flask:
             return jsonify(error="Query param 'competition' is required."), 400
         return jsonify(queries.list_events(get_db(), competition))
 
+    @app.get("/api/years")
+    def years():
+        """Year range available for a competition — drives the year slider."""
+        competition = request.args.get("competition")
+        if not competition:
+            return jsonify(error="Query param 'competition' is required."), 400
+        return jsonify(queries.year_bounds(get_db(), competition))
+
     # ---- Problems -----------------------------------------------------------
 
     def _filters_from_query():
-        year = request.args.get("year", type=int)
         return dict(
             competition=request.args.get("competition"),
             topic=request.args.get("topic"),
             difficulty=request.args.get("difficulty"),
             event=request.args.get("event"),
-            year=year,
+            year=request.args.get("year", type=int),
+            year_min=request.args.get("year_min", type=int),
+            year_max=request.args.get("year_max", type=int),
         )
 
     @app.get("/api/problems/random")

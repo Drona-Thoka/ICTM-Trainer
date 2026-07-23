@@ -555,6 +555,38 @@
 
 /* ---- Practice flow (integrated with the JSON API) ---------------------- */
 
+.year-range {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 4px 0 10px;
+}
+
+.year-range-label {
+  color: #153E21;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.year-range-label strong {
+  color: #047857;
+}
+
+.year-range-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(320px, 70vw);
+}
+
+.year-range-sliders input[type='range'] {
+  width: 100%;
+  accent-color: #047857;
+  cursor: pointer;
+}
+
 .practice-bar {
   display: flex;
   align-items: center;

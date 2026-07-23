@@ -73,12 +73,33 @@ def list_events(conn: sqlite3.Connection, competition: str) -> list[str]:
     return [r["comp_event"] for r in rows]
 
 
+def year_bounds(conn: sqlite3.Connection, competition: str) -> dict:
+    """Earliest/latest contest year available for a competition (approved only).
+
+    Powers the year-range slider; both are None when the competition has no data.
+    """
+    row = conn.execute(
+        """
+        SELECT MIN(p.comp_year) AS min_year, MAX(p.comp_year) AS max_year
+        FROM problems p
+        JOIN competitions c ON c.competition_id = p.competition_id
+        WHERE c.short_name = ?
+          AND p.review_status = 'approved'
+          AND p.comp_year IS NOT NULL
+        """,
+        (competition,),
+    ).fetchone()
+    return {"min": row["min_year"], "max": row["max_year"]}
+
+
 def _build_filters(
     competition: str | None,
     topic: str | None,
     difficulty: str | None,
     event: str | None,
     year: int | None,
+    year_min: int | None = None,
+    year_max: int | None = None,
 ) -> tuple[str, list, bool]:
     """Assemble the shared WHERE clause for problem queries.
 
@@ -106,6 +127,14 @@ def _build_filters(
         clauses.append("p.comp_year = ?")
         params.append(year)
 
+    if year_min is not None:
+        clauses.append("p.comp_year >= ?")
+        params.append(year_min)
+
+    if year_max is not None:
+        clauses.append("p.comp_year <= ?")
+        params.append(year_max)
+
     if topic:
         needs_topic_join = True
         clauses.append("t.name = ?")
@@ -130,10 +159,12 @@ def get_random_problem(
     difficulty: str | None = None,
     event: str | None = None,
     year: int | None = None,
+    year_min: int | None = None,
+    year_max: int | None = None,
 ) -> sqlite3.Row | None:
     """One random approved problem matching the filters, or None if none match."""
     where, params, needs_topic_join = _build_filters(
-        competition, topic, difficulty, event, year
+        competition, topic, difficulty, event, year, year_min, year_max
     )
     sql = f"""
         SELECT {_PROBLEM_COLUMNS}

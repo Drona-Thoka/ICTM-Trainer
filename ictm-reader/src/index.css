@@ -16,7 +16,10 @@
   --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
 
-  font: 18px/145% var(--sans);
+  /* Unitless ratio, not 145%: a percentage line-height computes to a px value at
+     the root and inherits as that px value, so large headings got a 26px line
+     box and wrapped lines overlapped. */
+  font: 18px/1.45 var(--sans);
   letter-spacing: 0.18px;
   color-scheme: light dark;
   color: var(--text);
@@ -76,6 +79,7 @@ h2 {
 
 h1 {
   font-size: 56px;
+  line-height: 1.12;
   letter-spacing: -1.68px;
   margin: 32px 0;
   @media (max-width: 1024px) {

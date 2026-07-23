@@ -64,7 +64,14 @@ const ictmEventToDb: Record<string, string> = {
   'Junior-Senior 2 Person Team': 'Junior-Senior 2 Person',
 }
 
+// ICTM team events are graded as a whole round, so per-topic filtering is
+// meaningless there — the topic control is hidden for them.
+function isTeamEvent(event: string | null): boolean {
+  return !!event && event.toLowerCase().includes('team')
+}
+
 // Map each competition's native difficulty label onto the backend's tier param.
+// Anything unrecognized (including "All") means "no difficulty filter".
 function toTier(label: string | null): 'easy' | 'medium' | 'hard' | null {
   if (!label) return null
   const l = label.toLowerCase()
@@ -88,6 +95,11 @@ type PracticeProps = {
 function Practice({ competition, difficulty, topic, event }: PracticeProps) {
   const [realTopics, setRealTopics] = useState<Set<string>>(new Set())
 
+  // Year range: bounds come from the data, so the slider widens as more
+  // contests are ingested. null bounds = this competition has no year data.
+  const [bounds, setBounds] = useState<{ min: number; max: number } | null>(null)
+  const [years, setYears] = useState<[number, number] | null>(null)
+
   const [problem, setProblem] = useState<Problem | null>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'error' | 'empty'>('idle')
   const [error, setError] = useState<string | null>(null)
@@ -107,6 +119,23 @@ function Practice({ competition, difficulty, topic, event }: PracticeProps) {
       .catch(() => setRealTopics(new Set()))
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+    setBounds(null)
+    setYears(null)
+    fetch(`/api/years?competition=${encodeURIComponent(competition)}`)
+      .then((r) => r.json())
+      .then((b: { min: number | null; max: number | null }) => {
+        if (cancelled || b.min == null || b.max == null) return
+        setBounds({ min: b.min, max: b.max })
+        setYears([b.min, b.max])
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [competition])
+
   async function fetchProblem() {
     setStatus('loading')
     setError(null)
@@ -122,6 +151,11 @@ function Practice({ competition, difficulty, topic, event }: PracticeProps) {
     // curated labels without tagged problems are ignored so a problem still loads.
     if (topic && topic !== 'All topics' && realTopics.has(topic)) params.set('topic', topic)
     if (event) params.set('event', event)
+    // Only send the range when it's narrower than everything available.
+    if (years && bounds && (years[0] > bounds.min || years[1] < bounds.max)) {
+      params.set('year_min', String(years[0]))
+      params.set('year_max', String(years[1]))
+    }
 
     try {
       const res = await fetch(`/api/problems/random?${params.toString()}`)
@@ -175,6 +209,38 @@ function Practice({ competition, difficulty, topic, event }: PracticeProps) {
 
   return (
     <>
+      {bounds && years && bounds.min < bounds.max && (
+        <div className="year-range">
+          <span className="year-range-label">
+            Years <strong>{years[0]}</strong>–<strong>{years[1]}</strong>
+          </span>
+          <div className="year-range-sliders">
+            <input
+              type="range"
+              aria-label="Earliest year"
+              min={bounds.min}
+              max={bounds.max}
+              value={years[0]}
+              onChange={(e) => {
+                const v = Number(e.target.value)
+                setYears((prev) => (prev ? [Math.min(v, prev[1]), prev[1]] : prev))
+              }}
+            />
+            <input
+              type="range"
+              aria-label="Latest year"
+              min={bounds.min}
+              max={bounds.max}
+              value={years[1]}
+              onChange={(e) => {
+                const v = Number(e.target.value)
+                setYears((prev) => (prev ? [prev[0], Math.max(v, prev[0])] : prev))
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="practice-bar">
         <button type="button" className="nav-button primary" onClick={fetchProblem}>
           {problem ? 'New problem' : 'Get problem'}
@@ -333,11 +399,11 @@ function Home() {
 
 // ---- AMC 10 / AMC 12 / AIME / ARML (difficulty + topic) -------------------
 
-const difficulties = ['easy', 'medium', 'hard'] as const
+const difficulties = ['all', 'easy', 'medium', 'hard'] as const
 type Difficulty = (typeof difficulties)[number]
 
 function CompPage({ title, description, competition }: { title: string; description: string; competition: string }) {
-  const [diff, setDiff] = useState<Difficulty>('easy')
+  const [diff, setDiff] = useState<Difficulty>('all')
   const [selectedTopic, setSelectedTopic] = useState('All topics')
 
   return (
@@ -385,8 +451,8 @@ function CompPage({ title, description, competition }: { title: string; descript
 // ---- NSML (grade + Q1–Q5 + per-grade topics) ------------------------------
 
 function NsmlPage({ title, description }: { title: string; description: string }) {
-  const nsmlDiffs = ['Q1', 'Q2', 'Q3', 'Q4', 'Q5']
-  const [selectedDiff, setSelectedDiff] = useState<string | null>(null)
+  const nsmlDiffs = ['All', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5']
+  const [selectedDiff, setSelectedDiff] = useState<string>('All')
   const [selectedGrade, setSelectedGrade] = useState('10')
   const nsmlTopicOptions = nsmlTopicsByGrade[selectedGrade] ?? topicOptions
   const [selectedTopic, setSelectedTopic] = useState(nsmlTopicsByGrade['10'][0])
@@ -454,8 +520,8 @@ function NsmlPage({ title, description }: { title: string; description: string }
 function IctmPage({ title, description }: { title: string; description: string }) {
   const events = Object.keys(ictmTopicsByEvent)
   const [selected, setSelected] = useState<string | null>(null)
-  const ictmDiffs = ['Easy', 'Medium', 'Hard']
-  const [selectedDiff, setSelectedDiff] = useState<string | null>(null)
+  const ictmDiffs = ['All', 'Easy', 'Medium', 'Hard']
+  const [selectedDiff, setSelectedDiff] = useState<string>('All')
   const [selectedTopic, setSelectedTopic] = useState('All topics')
   const ictmTopicOptions = (selected && ictmTopicsByEvent[selected]) ? ictmTopicsByEvent[selected] : topicOptions
 
@@ -497,22 +563,25 @@ function IctmPage({ title, description }: { title: string; description: string }
           </select>
         </label>
 
-        <label className="control-group">
-          <span>Topic</span>
-          <select value={selectedTopic} onChange={(e) => setSelectedTopic(e.target.value)}>
-            {ictmTopicOptions.map((topic) => (
-              <option key={topic} value={topic}>
-                {topic}
-              </option>
-            ))}
-          </select>
-        </label>
+        {/* Team rounds are scored as a whole round, so they have no topic split. */}
+        {!isTeamEvent(selected) && (
+          <label className="control-group">
+            <span>Topic</span>
+            <select value={selectedTopic} onChange={(e) => setSelectedTopic(e.target.value)}>
+              {ictmTopicOptions.map((topic) => (
+                <option key={topic} value={topic}>
+                  {topic}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       <Practice
         competition="ICTM"
         difficulty={selectedDiff}
-        topic={selectedTopic}
+        topic={isTeamEvent(selected) ? null : selectedTopic}
         event={selected ? (ictmEventToDb[selected] ?? null) : null}
       />
 
