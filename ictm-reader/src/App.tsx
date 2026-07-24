@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, Route, Routes } from 'react-router-dom'
+import { Link, Route, Routes, useLocation } from 'react-router-dom'
 import MathText from './MathText'
 import './App.css'
 import Auth from './Auth'
@@ -655,12 +655,6 @@ function CompPage({ title, description, competition }: { title: string; descript
       </div>
 
       <Practice competition={competition} difficulty={diff} topic={selectedTopic} events={null} />
-
-      <div className="button-row">
-        <Link to="/" className="nav-button">
-          Back to home
-        </Link>
-      </div>
     </section>
   )
 }
@@ -708,12 +702,6 @@ function NsmlPage({ title, description }: { title: string; description: string }
       </div>
 
       <Practice competition="NSML" difficulty={selectedDiff} topic={selectedTopic} events={null} />
-
-      <div className="button-row">
-        <Link to="/" className="nav-button">
-          Back to home
-        </Link>
-      </div>
     </section>
   )
 }
@@ -801,13 +789,42 @@ function IctmPage({ title, description }: { title: string; description: string }
         topic={teamRound ? null : selectedTopic}
         events={selectedEvents}
       />
-
-      <div className="button-row">
-        <Link to="/" className="nav-button">
-          Back to home
-        </Link>
-      </div>
     </section>
+  )
+}
+
+// ---- Home button (global, appears on all pages except home) -------------
+
+function HomeButton() {
+  return (
+    <Link
+      to="/"
+      aria-label="Go to home"
+      style={{
+        position: 'absolute',
+        top: '12px',
+        left: '12px',
+        background: 'transparent',
+        border: 'none',
+        cursor: 'pointer',
+        padding: '8px',
+        borderRadius: '50%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        transition: 'background 0.2s',
+        color: 'var(--text-h)',
+        zIndex: 10,
+        textDecoration: 'none',
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--chip-bg)')}
+      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+    >
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 12l9-9 9 9" />
+        <path d="M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10" />
+      </svg>
+    </Link>
   )
 }
 
@@ -815,6 +832,8 @@ function IctmPage({ title, description }: { title: string; description: string }
 
 function App() {
   const [user, setUser] = useState<any>(null)
+  const location = useLocation()
+  const showHomeButton = location.pathname !== '/'
 
   useEffect(() => {
     let mounted = true
@@ -867,62 +886,65 @@ function App() {
           <Link to="/comp-ictm" className="nav-button">ICTM</Link>
         </nav>
 
-        <Routes>
-          <Route path="/" element={<Home user={user} />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/stats" element={<StatsPage />} />
-          {/* Reached by a hard page load from the reset email, so production
-              hosting needs an SPA catch-all rewrite or this 404s. */}
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route
-            path="/comp-amc10"
-            element={
-              <CompPage
-                title="AMC 10"
-                competition="AMC10"
-                description="The AMC 10 is a 25‑question, 75‑minute multiple‑choice national exam for 9th and 10th graders covering algebra, geometry, number theory, and combinatorics, with top performers qualifying for the AIME."
-              />
-            }
-          />
-          <Route
-            path="/comp-amc12"
-            element={
-              <CompPage
-                title="AMC 12"
-                competition="AMC12"
-                description="The AMC 12 follows the same format as the AMC 10 but includes pre‑calculus topics such as trigonometry and logarithms, making it the primary qualifying route for upperclassmen to reach the AIME."
-              />
-            }
-          />
-          <Route
-            path="/comp-aime"
-            element={
-              <CompPage
-                title="AIME"
-                competition="AIME"
-                description="The AIME is an invitation‑only, 15‑problem, 3‑hour exam that requires integer answers from 0 to 999 and serves as the crucial bridge from the AMC to the USAJMO and USAMO."
-              />
-            }
-          />
-          <Route
-            path="/comp-nsml"
-            element={
-              <NsmlPage
-                title="NSML"
-                description="The North Suburban Math League is an Illinois‑based series of team and individual meets held throughout the school year that fosters collaborative problem‑solving across a wide range of mathematical topics."
-              />
-            }
-          />
-          <Route
-            path="/comp-ictm"
-            element={
-              <IctmPage
-                title="ICTM"
-                description="The Illinois Council of Teachers of Mathematics runs a large state‑wide competition with separate Frosh/Soph and Junior/Senior brackets, featuring both individual tests and team challenges to recognize excellence at every high‑school level."
-              />
-            }
-          />
-        </Routes>
+        <div style={{ position: 'relative' }}>
+          {showHomeButton && <HomeButton />}
+          <Routes>
+            <Route path="/" element={<Home user={user} />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/stats" element={<StatsPage />} />
+            {/* Reached by a hard page load from the reset email, so production
+                hosting needs an SPA catch-all rewrite or this 404s. */}
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route
+              path="/comp-amc10"
+              element={
+                <CompPage
+                  title="AMC 10"
+                  competition="AMC10"
+                  description="The AMC 10 is a 25‑question, 75‑minute multiple‑choice national exam for 9th and 10th graders covering algebra, geometry, number theory, and combinatorics, with top performers qualifying for the AIME."
+                />
+              }
+            />
+            <Route
+              path="/comp-amc12"
+              element={
+                <CompPage
+                  title="AMC 12"
+                  competition="AMC12"
+                  description="The AMC 12 follows the same format as the AMC 10 but includes pre‑calculus topics such as trigonometry and logarithms, making it the primary qualifying route for upperclassmen to reach the AIME."
+                />
+              }
+            />
+            <Route
+              path="/comp-aime"
+              element={
+                <CompPage
+                  title="AIME"
+                  competition="AIME"
+                  description="The AIME is an invitation‑only, 15‑problem, 3‑hour exam that requires integer answers from 0 to 999 and serves as the crucial bridge from the AMC to the USAJMO and USAMO."
+                />
+              }
+            />
+            <Route
+              path="/comp-nsml"
+              element={
+                <NsmlPage
+                  title="NSML"
+                  description="The North Suburban Math League is an Illinois‑based series of team and individual meets held throughout the school year that fosters collaborative problem‑solving across a wide range of mathematical topics."
+                />
+              }
+            />
+            <Route
+              path="/comp-ictm"
+              element={
+                <IctmPage
+                  title="ICTM"
+                  description="The Illinois Council of Teachers of Mathematics runs a large state‑wide competition with separate Frosh/Soph and Junior/Senior brackets, featuring both individual tests and team challenges to recognize excellence at every high‑school level."
+                />
+              }
+            />
+          </Routes>
+        </div>
       </div>
     </ThemeProvider>
   )
