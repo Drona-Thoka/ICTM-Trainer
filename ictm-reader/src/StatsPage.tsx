@@ -13,8 +13,6 @@ type Summary = {
 export default function StatsPage() {
   const [data, setData] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
-  // Distinguish "signed out" from "the request failed" — both used to render
-  // the same misleading "sign in" message.
   const [signedIn, setSignedIn] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -49,7 +47,6 @@ export default function StatsPage() {
     }
 
     fetchStats()
-    // Re-fetch when the user signs in or out while this page is open.
     const { data: sub } = supabase.auth.onAuthStateChange(() => fetchStats())
     return () => {
       cancelled = true
@@ -102,8 +99,6 @@ export default function StatsPage() {
       <h1 style={{ textAlign: 'center' }}>Your Progress</h1>
 
       {/* Summary Cards */}
-      {/* Fixed 3 columns, not auto-fit: the headline numbers should always read
-          as one horizontal row rather than reflowing onto separate lines. */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 40 }}>
         <div className="hero-card" style={{ textAlign: 'center', padding: '20px 12px' }}>
           <div style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--text-h)', opacity: 0.7 }}>Attempts</div>
@@ -182,10 +177,7 @@ export default function StatsPage() {
         </div>
       )}
 
-      {/* Link, not <a href>: a plain anchor forces a full page reload. */}
-      <div style={{ marginTop: 24, textAlign: 'center' }}>
-        <Link to="/" className="nav-button">Back to Home</Link>
-      </div>
+      {/* No "Back to Home" button here – the global home icon handles that */}
     </section>
   )
 }
