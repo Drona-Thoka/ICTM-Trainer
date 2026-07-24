@@ -4,19 +4,27 @@ import katex from 'katex'
 const MATH_RE = /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\$([^$]+?)\$|\\\(([\s\S]+?)\\\)/g
 const LOOKS_MATHY = /[\\^_{}√]/
 
-// ---- Clean up common OCR/ingestion errors ----
+// ---- Clean up common OCR errors and text commands ----
 function cleanLatex(s: string): string {
-  // Replace \text{frac} (or \text {frac}) with \frac
+  // 1. Fix OCR: \text{frac} -> \frac
   s = s.replace(/\\text\s*\{\s*frac\s*\}/g, '\\frac')
 
-  // Remove stray \text{right}, \text{left} that break delimiters
+  // 2. Remove stray \text{right}, \text{left} that break delimiters
   s = s.replace(/\\text\s*\{\s*right\s*\}/g, '')
   s = s.replace(/\\text\s*\{\s*left\s*\}/g, '')
 
-  // Sometimes \times \text{right} should be \right) – uncomment if needed:
-  // s = s.replace(/\\times\s*\\text\{\s*right\s*\}/g, '\\right)')
+  // 3. Convert \emph{...} to \textit{...} (KaTeX supports \textit)
+  s = s.replace(/\\emph\s*\{([^{}]*)\}/g, '\\textit{$1}')
 
-  // Remove extra spaces inside \left( and \right)
+  // 4. Convert \text{...} to \textit{...} (if it’s not already a fraction)
+  //    but be careful not to break \text{frac} which we already fixed.
+  s = s.replace(/\\text\s*\{([^{}]*)\}/g, (match, content) => {
+    // If it contains 'frac', skip (already handled)
+    if (content.includes('frac')) return match
+    return `\\textit{${content}}`
+  })
+
+  // 5. Clean up spacing inside \left( and \right)
   s = s.replace(/\\left\s*\(/g, '\\left(')
   s = s.replace(/\\right\s*\)/g, '\\right)')
 
@@ -24,7 +32,6 @@ function cleanLatex(s: string): string {
 }
 
 function renderTeX(tex: string, displayMode: boolean): string {
-  // Clean before rendering
   const cleaned = cleanLatex(tex)
   return katex.renderToString(cleaned, {
     displayMode,
@@ -85,6 +92,5 @@ export default function MathText({ children, math, className }: Props) {
     )
   }
 
-  // For mixed text, the cleaning happens inside parseMixed via renderTeX
   return <span className={`mathtext ${className ?? ''}`}>{parseMixed(text)}</span>
 }
