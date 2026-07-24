@@ -1,25 +1,32 @@
 import type { ReactNode } from 'react'
 import katex from 'katex'
 
-/*
- * MathText — render strings that mix prose and LaTeX, as served raw by the
- * backend (problem_text, solution_text, answers, choices).
- *
- *   <MathText>{problem.problem_text}</MathText>   // mixed text + $…$ / \(…\) math
- *   <MathText math>{correctAnswer}</MathText>     // a bare expression like \frac{15}{2}
- *
- * KaTeX renders with throwOnError:false, so malformed input degrades to red
- * inline text instead of crashing. KaTeX HTML output is trusted.
- */
-
-// $$…$$ (display) | \[…\] (display) | $…$ (inline) | \(…\) (inline)
 const MATH_RE = /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\$([^$]+?)\$|\\\(([\s\S]+?)\\\)/g
-
-// Heuristic: does a bare string contain anything worth rendering as math?
 const LOOKS_MATHY = /[\\^_{}√]/
 
+// ---- Clean up common OCR/ingestion errors ----
+function cleanLatex(s: string): string {
+  // Replace \text{frac} (or \text {frac}) with \frac
+  s = s.replace(/\\text\s*\{\s*frac\s*\}/g, '\\frac')
+
+  // Remove stray \text{right}, \text{left} that break delimiters
+  s = s.replace(/\\text\s*\{\s*right\s*\}/g, '')
+  s = s.replace(/\\text\s*\{\s*left\s*\}/g, '')
+
+  // Sometimes \times \text{right} should be \right) – uncomment if needed:
+  // s = s.replace(/\\times\s*\\text\{\s*right\s*\}/g, '\\right)')
+
+  // Remove extra spaces inside \left( and \right)
+  s = s.replace(/\\left\s*\(/g, '\\left(')
+  s = s.replace(/\\right\s*\)/g, '\\right)')
+
+  return s
+}
+
 function renderTeX(tex: string, displayMode: boolean): string {
-  return katex.renderToString(tex, {
+  // Clean before rendering
+  const cleaned = cleanLatex(tex)
+  return katex.renderToString(cleaned, {
     displayMode,
     throwOnError: false,
     strict: false,
@@ -69,13 +76,15 @@ export default function MathText({ children, math, className }: Props) {
     if (!LOOKS_MATHY.test(text)) {
       return <span className={className}>{text}</span>
     }
+    const cleaned = cleanLatex(stripDelimiters(text))
     return (
       <span
         className={className}
-        dangerouslySetInnerHTML={{ __html: renderTeX(stripDelimiters(text), false) }}
+        dangerouslySetInnerHTML={{ __html: renderTeX(cleaned, false) }}
       />
     )
   }
 
+  // For mixed text, the cleaning happens inside parseMixed via renderTeX
   return <span className={`mathtext ${className ?? ''}`}>{parseMixed(text)}</span>
 }
