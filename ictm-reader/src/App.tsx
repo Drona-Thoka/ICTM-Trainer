@@ -266,6 +266,22 @@ function Practice({ competition, difficulty, topic, events }: PracticeProps) {
     [problem],
   )
 
+  // ---- FIX: Ensure images always hit the backend API ----
+  // Returns `string | undefined` so TypeScript is happy with <img src>.
+  const getImageUrl = (url: string | null): string | undefined => {
+    if (!url) return undefined
+    // If the URL is /images/..., rewrite to /api/images/...
+    if (url.startsWith('/images')) {
+      return url.replace('/images', '/api/images')
+    }
+    // If it's images/... (no leading slash), add /api/
+    if (url.startsWith('images')) {
+      return '/api/' + url
+    }
+    // Already starts with /api/ or is absolute – keep as-is
+    return url
+  }
+
   return (
     <>
       {bounds && years && bounds.min < bounds.max && (
@@ -339,7 +355,11 @@ function Practice({ competition, difficulty, topic, events }: PracticeProps) {
               </div>
 
               {problem.image_url && (
-                <img className="problem-image" src={problem.image_url} alt="problem diagram" />
+                <img
+                  className="problem-image"
+                  src={getImageUrl(problem.image_url)}
+                  alt="problem diagram"
+                />
               )}
 
               {problem.topics.length > 0 && (
