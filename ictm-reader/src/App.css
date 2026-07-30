@@ -275,7 +275,8 @@
 
 .brand-subtitle {
   font-size: 0.85rem;
-  color: var(--accent);
+  color: var(--chip-text);
+  font-weight: 700;
   margin-top: 4px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -697,14 +698,81 @@
 .year-range-sliders {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 12px;
   width: min(320px, 70vw);
 }
 
+/* Custom-styled so the thumb is a real finger target, not the OS default speck.
+   Track is drawn on ::-*-track; thumb is centered with margin-top on webkit
+   (Firefox centers automatically). Sizes scale up under `pointer: coarse`. */
 .year-range-sliders input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
   width: 100%;
-  accent-color: var(--accent);
+  height: 24px; /* touch band; the visible track stays thin via ::-*-track */
+  background: transparent;
   cursor: pointer;
+}
+
+.year-range-sliders input[type='range']::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+}
+.year-range-sliders input[type='range']::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.year-range-sliders input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -7px; /* (track 6 − thumb 20) / 2 keeps the thumb on the track */
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+.year-range-sliders input[type='range']::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.year-range-sliders input[type='range']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+/* Touch devices: fatter track, much bigger thumb, more room between the two
+   sliders so a fingertip never lands on both. */
+@media (pointer: coarse) {
+  .year-range-sliders {
+    gap: 22px;
+    width: min(340px, 82vw);
+  }
+  .year-range-sliders input[type='range'] {
+    height: 36px;
+  }
+  .year-range-sliders input[type='range']::-webkit-slider-runnable-track,
+  .year-range-sliders input[type='range']::-moz-range-track {
+    height: 8px;
+  }
+  .year-range-sliders input[type='range']::-webkit-slider-thumb {
+    width: 32px;
+    height: 32px;
+    margin-top: -12px; /* (track 8 − thumb 32) / 2 */
+  }
+  .year-range-sliders input[type='range']::-moz-range-thumb {
+    width: 32px;
+    height: 32px;
+  }
 }
 
 .practice-bar {
@@ -892,4 +960,59 @@
 .nav-button.primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ---- Mobile / small-screen overflow hardening ------------------------- */
+
+/* Never let a wide child force horizontal page scroll. `clip` (not `hidden`)
+   does not create a scroll container, so the sticky header keeps working. */
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+/* Long words, big numbers, URLs and unbroken answer strings wrap instead of
+   pushing the card off the side of the screen. `anywhere` only breaks a token
+   when it would otherwise overflow, so normal prose is untouched. */
+.problem-text,
+.solution-text,
+.mathtext,
+.result-answer,
+.result-headline,
+.hero-copy,
+.choice {
+  overflow-wrap: anywhere;
+}
+
+/* Wide display equations (matrices, systems, long lines) scroll inside the
+   card instead of spilling past the viewport edge. */
+.katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+}
+
+/* KaTeX carries its own vertical metrics; inheriting the prose container's tall
+   line-height is what makes stacked math and text lines overlap. */
+.mathtext .katex,
+.problem-text .katex,
+.solution-text .katex {
+  line-height: normal;
+}
+
+@media (max-width: 640px) {
+  #comp-page {
+    padding: 24px 12px 40px;
+  }
+
+  .question-card {
+    padding: 16px 14px;
+  }
+
+  .app-header {
+    gap: 10px;
+    padding: 12px;
+  }
 }

@@ -66,7 +66,11 @@ def create_app() -> Flask:
 
     @app.get("/api/health")
     def health():
-        return jsonify(status="ok", problems=queries.count_approved(get_db()))
+        return jsonify(
+            status="ok",
+            problems=queries.count_approved(get_db()),
+            stats=stats.diagnostics(),
+        )
 
     @app.get("/api/competitions")
     def competitions():

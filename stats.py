@@ -6,6 +6,7 @@ Uses Supabase as the database, with the user's JWT token for auth.
 from __future__ import annotations  # `X | None` hints on older serverless Pythons
 
 import os
+import re
 from supabase import create_client, Client
 
 # The client is created lazily, not at import time: stats/accounts are an
@@ -14,12 +15,50 @@ from supabase import create_client, Client
 _client: Client | None = None
 
 
+def _clean(v: str | None) -> str:
+    """Strip the usual dashboard-paste noise: surrounding whitespace/quotes and
+    a leading '=' left over from copying a `KEY=value` line starting at the '='.
+    The same class of typo already white-screened the frontend once."""
+    if not v:
+        return ""
+    v = v.strip().lstrip("=").strip()
+    if len(v) >= 2 and v[0] in "\"'" and v[-1] == v[0]:
+        v = v[1:-1].strip()
+    return v
+
+
+def _normalize_url(v: str | None) -> str:
+    """Return the Supabase API host, tolerating a pasted dashboard URL.
+
+    A project ref is 20 lowercase alphanumerics, so
+        https://supabase.com/dashboard/project/<ref>[/...]
+    becomes
+        https://<ref>.supabase.co
+    which is the host the auth/postgrest calls must actually hit.
+    """
+    v = _clean(v)
+    if not v:
+        return ""
+    if "supabase.com/dashboard" in v:
+        m = re.search(r"/project/([a-z0-9]{20})", v)
+        if m:
+            return f"https://{m.group(1)}.supabase.co"
+    return v.rstrip("/")
+
+
+def _resolve_credentials() -> tuple[str, str]:
+    """(url, service_key) after cleaning; either may be '' when unset."""
+    return (
+        _normalize_url(os.environ.get("SUPABASE_URL")),
+        _clean(os.environ.get("SUPABASE_SERVICE_ROLE_KEY")),
+    )
+
+
 def get_client() -> Client | None:
     """Shared Supabase client, or None when SUPABASE_* env vars are unset."""
     global _client
     if _client is None:
-        url = os.environ.get("SUPABASE_URL")
-        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        url, key = _resolve_credentials()
         if not url or not key:
             return None
         _client = create_client(url, key)
@@ -28,6 +67,24 @@ def get_client() -> Client | None:
 
 def is_configured() -> bool:
     return get_client() is not None
+
+
+def diagnostics() -> dict:
+    """Non-secret view of the Supabase config, for /api/health.
+
+    Reveals the resolved API *host* (not a secret) and whether a key is present,
+    so a misconfigured deployment can be diagnosed without exposing credentials.
+    """
+    url, key = _resolve_credentials()
+    host = ""
+    if url:
+        m = re.match(r"https?://([^/]+)", url)
+        host = m.group(1) if m else "(unparseable)"
+    return {
+        "configured": bool(url and key),
+        "url_host": host or "(unset)",
+        "has_service_key": bool(key),
+    }
 
 
 def record_attempt(user_id: str, problem_id: int, competition: str, topic: str,
