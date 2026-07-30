@@ -266,19 +266,17 @@ function Practice({ competition, difficulty, topic, events }: PracticeProps) {
     [problem],
   )
 
-  // ---- FIX: Ensure images always hit the backend API ----
-  // Returns `string | undefined` so TypeScript is happy with <img src>.
+  // Diagram files are static assets under public/images — served directly by
+  // Vite in dev and by the Vercel CDN in prod. The Python /api/images route is
+  // NOT bundled with the image files on serverless (Vercel treats public/ as
+  // CDN assets, not function files), so it 404s there. Whatever prefix the API
+  // used (IMAGE_BASE_URL defaults to /api/images), resolve to the static
+  // /images/<rest> path, which returns 200 in both environments.
   const getImageUrl = (url: string | null): string | undefined => {
     if (!url) return undefined
-    // If the URL is /images/..., rewrite to /api/images/...
-    if (url.startsWith('/images')) {
-      return url.replace('/images', '/api/images')
-    }
-    // If it's images/... (no leading slash), add /api/
-    if (url.startsWith('images')) {
-      return '/api/' + url
-    }
-    // Already starts with /api/ or is absolute – keep as-is
+    if (/^https?:\/\//i.test(url)) return url // an absolute CDN URL: leave as-is
+    const i = url.indexOf('images/')
+    if (i !== -1) return '/' + url.slice(i) // .../images/ictm/x.png -> /images/ictm/x.png
     return url
   }
 
