@@ -671,14 +671,15 @@ function Home({ user }: { user: any }) {
       </div>
       <div
         style={{
-          position: 'absolute',
-          bottom: '16px',
-          right: '20px',
+          position: 'fixed',
+          bottom: '8px',
+          right: '10px',
           fontSize: '0.75rem',
           opacity: 0.4,
           color: 'var(--text-h)',
           userSelect: 'none',
           pointerEvents: 'none',
+          zIndex: 1000,
         }}
       >
         v{APP_VERSION}
