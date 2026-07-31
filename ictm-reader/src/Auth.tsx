@@ -1,5 +1,5 @@
-﻿import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+﻿﻿import { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import PasswordFields, { inputStyle, passwordProblem } from './PasswordFields'
 
@@ -7,6 +7,7 @@ import PasswordFields, { inputStyle, passwordProblem } from './PasswordFields'
 // including difficulty and every topic. This page handles the account only.
 
 export default function Auth() {
+  const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [user, setUser] = useState<any>(null)
@@ -45,7 +46,13 @@ export default function Auth() {
     e.preventDefault()
     setLoading(true)
     setMessage(null)
-    const { error } = await supabase.auth.signUp({ email, password })
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: window.location.origin,
+      },
+    })
     setLoading(false)
     if (error) setMessage(error.message)
     else setMessage('Check your email for confirmation (if enabled).')
@@ -57,8 +64,12 @@ export default function Auth() {
     setMessage(null)
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     setLoading(false)
-    if (error) setMessage(error.message)
-    else setMessage('Signed in')
+    if (error) {
+      setMessage(error.message)
+    } else {
+      setMessage('Signed in')
+      navigate('/')
+    }
   }
 
   async function handleForgotPassword(e: React.FormEvent) {

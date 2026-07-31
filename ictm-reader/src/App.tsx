@@ -5,16 +5,11 @@ import './App.css'
 import Auth from './Auth'
 import StatsPage from './StatsPage'
 import ResetPassword from './ResetPassword'
-import {
-  ALL_EVENTS,
-  ALL_LEVELS,
-  ALL_TOPICS,
-  NSML_TOPICS_BY_GRADE,
-  useIctmEvents,
-  useTopics,
-} from './useFilterOptions'
+import { ALL_EVENTS, ALL_LEVELS, ALL_TOPICS, useIctmEvents, useTopics } from './useFilterOptions'
 import { supabase } from './supabaseClient'
 import { ThemeProvider, useTheme } from './ThemeContext'
+
+const APP_VERSION = '1.0'
 
 // ---- API types (see ICTM-Trainer/app.py) ---------------------------------
 
@@ -109,13 +104,10 @@ type PracticeProps = {
   competition: string
   difficulty: string | null // native label; mapped to a tier here
   topic: string | null
-  // Several topics at once (NSML maps a grade to a set of topics). When given,
-  // this takes precedence over `topic`.
-  topics?: string[] | null
   events: string[] | null // stored comp_event values, or null for no event filter
 }
 
-function Practice({ competition, difficulty, topic, topics, events }: PracticeProps) {
+function Practice({ competition, difficulty, topic, events }: PracticeProps) {
 
   // Year range: bounds come from the data, so the slider widens as more
   // contests are ingested. null bounds = this competition has no year data.
@@ -135,6 +127,18 @@ function Practice({ competition, difficulty, topic, topics, events }: PracticePr
   // the override button is clickable the moment the result renders — a click in
   // that window would otherwise find no row id and silently do nothing.
   const recordRef = useRef<Promise<string | number | null> | null>(null)
+
+  // Timer state
+  const [startTime, setStartTime] = useState<number | null>(null)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const timerIntervalRef = useRef<number | null>(null)
+
+  // Helper to format seconds as MM:SS
+  const formatTime = (totalSeconds: number) => {
+    const mins = Math.floor(totalSeconds / 60)
+    const secs = Math.floor(totalSeconds % 60)
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+  }
 
   const [score, setScore] = useState({ correct: 0, total: 0 })
 
@@ -156,6 +160,15 @@ function Practice({ competition, difficulty, topic, topics, events }: PracticePr
   }, [competition])
 
   async function fetchProblem() {
+    // Stop and reset timer
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current)
+      timerIntervalRef.current = null
+    }
+    setStartTime(null)
+    setElapsedSeconds(0)
+    setResult(null) // ensure timer stops if result existed
+
     setStatus('loading')
     setError(null)
     setProblem(null)
@@ -167,10 +180,8 @@ function Practice({ competition, difficulty, topic, topics, events }: PracticePr
     const params = new URLSearchParams({ competition })
     const tier = toTier(difficulty)
     if (tier) params.set('difficulty', tier)
-    // Options come from the bank, so any selection here is a real tag. `topics`
-    // (a set, e.g. every topic in a grade) wins over the single `topic`.
-    const topicList = topics ?? (topic && topic !== ALL_TOPICS ? [topic] : [])
-    for (const t of topicList) params.append('topic', t)
+    // Options come from the bank, so any selection here is a real tag.
+    if (topic && topic !== ALL_TOPICS) params.set('topic', topic)
     for (const e of events ?? []) params.append('event', e)
     // Only send the range when it's narrower than everything available.
     if (years && bounds && (years[0] > bounds.min || years[1] < bounds.max)) {
@@ -190,6 +201,7 @@ function Practice({ competition, difficulty, topic, topics, events }: PracticePr
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error')
       setStatus('error')
+      // If error, timer is not started (already reset)
     }
   }
 
@@ -221,6 +233,33 @@ function Practice({ competition, difficulty, topic, topics, events }: PracticePr
       return null
     }
   }
+
+  // Timer effect: start when problem is loaded and not yet checked
+  useEffect(() => {
+    if (problem && !result) {
+      // Start timer if not already started
+      if (!startTime) {
+        setStartTime(Date.now())
+      }
+      // Set up interval to update elapsed seconds
+      if (timerIntervalRef.current === null) {
+        timerIntervalRef.current = window.setInterval(() => {
+          if (startTime) {
+            setElapsedSeconds((Date.now() - startTime) / 1000)
+          }
+        }, 200) // update every 200ms for smoothness
+      }
+    } else {
+      // No problem or already graded: stop interval
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current)
+        timerIntervalRef.current = null
+      }
+    }
+    return () => {
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
+    }
+  }, [problem, result, startTime])
 
   async function submitAnswer() {
     if (!problem || !answer.trim() || result) return
@@ -278,17 +317,19 @@ function Practice({ competition, difficulty, topic, topics, events }: PracticePr
     [problem],
   )
 
-  // Diagram files are static assets under public/images — served directly by
-  // Vite in dev and by the Vercel CDN in prod. The Python /api/images route is
-  // NOT bundled with the image files on serverless (Vercel treats public/ as
-  // CDN assets, not function files), so it 404s there. Whatever prefix the API
-  // used (IMAGE_BASE_URL defaults to /api/images), resolve to the static
-  // /images/<rest> path, which returns 200 in both environments.
+  // ---- FIX: Ensure images always hit the backend API ----
+  // Returns `string | undefined` so TypeScript is happy with <img src>.
   const getImageUrl = (url: string | null): string | undefined => {
     if (!url) return undefined
-    if (/^https?:\/\//i.test(url)) return url // an absolute CDN URL: leave as-is
-    const i = url.indexOf('images/')
-    if (i !== -1) return '/' + url.slice(i) // .../images/ictm/x.png -> /images/ictm/x.png
+    // If the URL is /images/..., rewrite to /api/images/...
+    if (url.startsWith('/images')) {
+      return url.replace('/images', '/api/images')
+    }
+    // If it's images/... (no leading slash), add /api/
+    if (url.startsWith('images')) {
+      return '/api/' + url
+    }
+    // Already starts with /api/ or is absolute – keep as-is
     return url
   }
 
@@ -333,6 +374,7 @@ function Practice({ competition, difficulty, topic, topics, events }: PracticePr
         <span className="score-badge" aria-live="polite">
           <strong>{score.correct}</strong> / {score.total} &middot; {accuracy}%
         </span>
+        {problem && !result && startTime && <span className="timer-badge">{formatTime(elapsedSeconds)}</span>}
       </div>
 
       <div className="question-card">
@@ -573,7 +615,7 @@ function Home({ user }: { user: any }) {
   }
 
   return (
-    <section id="home-page" className="home-hero">
+    <section id="home-page" className="home-hero" style={{ position: 'relative' }}>
       <div className="hero-card" style={{ textAlign: 'left' }}>
         {user ? (
           <>
@@ -629,6 +671,20 @@ function Home({ user }: { user: any }) {
           </>
         )}
       </div>
+      <div
+        style={{
+          position: 'absolute',
+          bottom: '16px',
+          right: '20px',
+          fontSize: '0.75rem',
+          opacity: 0.4,
+          color: 'var(--text-h)',
+          userSelect: 'none',
+          pointerEvents: 'none',
+        }}
+      >
+        v{APP_VERSION}
+      </div>
     </section>
   )
 }
@@ -674,34 +730,10 @@ function CompPage({ title, description, competition }: { title: string; descript
 function NsmlPage({ title, description }: { title: string; description: string }) {
   const nsmlDiffs = ['All', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5']
   const [selectedDiff, setSelectedDiff] = useState<string>('All')
-  const [selectedGrade, setSelectedGrade] = useState('9')
+  // The schema has no grade dimension, so this selects nothing today; kept
+  // because NSML data isn't ingested yet and grade is how the meets are run.
+  const [selectedGrade, setSelectedGrade] = useState('10')
   const [selectedTopic, setSelectedTopic] = useState(ALL_TOPICS)
-
-  // Every NSML topic that has problems, then narrowed to the ones belonging to
-  // the chosen grade (in the official nsml.org order). The grade drives which
-  // topics are offered, matching how NSML organizes its meets.
-  const allTopics = useTopics('NSML')
-  const gradeTopicNames = NSML_TOPICS_BY_GRADE[selectedGrade] ?? []
-  const available = gradeTopicNames
-    .map((name) => allTopics.find((t) => t.name === name))
-    .filter((t): t is { name: string; count: number } => !!t)
-
-  // Changing grade always resets the topic, so a stale topic from another grade
-  // can never linger in the (grade-specific) dropdown.
-  function changeGrade(grade: string) {
-    setSelectedGrade(grade)
-    setSelectedTopic(ALL_TOPICS)
-  }
-
-  // A specific topic filters to just that; "All topics" means every topic in the
-  // grade. The sentinel matches nothing, so a grade with no problems stays empty
-  // instead of falling through to the whole competition.
-  const effectiveTopics =
-    selectedTopic !== ALL_TOPICS
-      ? [selectedTopic]
-      : available.length
-        ? available.map((t) => t.name)
-        : [' none']
 
   return (
     <section id="comp-page">
@@ -724,7 +756,7 @@ function NsmlPage({ title, description }: { title: string; description: string }
       <div className="control-row">
         <label className="control-group">
           <span>Grade</span>
-          <select value={selectedGrade} onChange={(e) => changeGrade(e.target.value)}>
+          <select value={selectedGrade} onChange={(e) => setSelectedGrade(e.target.value)}>
             {gradeOptions.map((grade) => (
               <option key={grade} value={grade}>
                 Grade {grade}
@@ -732,26 +764,10 @@ function NsmlPage({ title, description }: { title: string; description: string }
             ))}
           </select>
         </label>
-        <label className="control-group">
-          <span>Topic</span>
-          <select value={selectedTopic} onChange={(e) => setSelectedTopic(e.target.value)}>
-            <option value={ALL_TOPICS}>{ALL_TOPICS}</option>
-            {available.map((t) => (
-              <option key={t.name} value={t.name}>
-                {t.name} ({t.count})
-              </option>
-            ))}
-          </select>
-        </label>
+        <TopicSelect competition="NSML" value={selectedTopic} onChange={setSelectedTopic} />
       </div>
 
-      <Practice
-        competition="NSML"
-        difficulty={selectedDiff}
-        topic={null}
-        topics={effectiveTopics}
-        events={null}
-      />
+      <Practice competition="NSML" difficulty={selectedDiff} topic={selectedTopic} events={null} />
     </section>
   )
 }
