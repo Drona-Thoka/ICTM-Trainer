@@ -114,7 +114,8 @@ def create_app() -> Flask:
     def _filters_from_query():
         return dict(
             competition=request.args.get("competition"),
-            topic=request.args.get("topic"),
+            # Repeatable: one grade selection can cover several NSML topics.
+            topic=request.args.getlist("topic") or None,
             difficulty=request.args.get("difficulty"),
             event=request.args.getlist("event") or None,
             year=request.args.get("year", type=int),

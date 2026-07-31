@@ -5,7 +5,14 @@ import './App.css'
 import Auth from './Auth'
 import StatsPage from './StatsPage'
 import ResetPassword from './ResetPassword'
-import { ALL_EVENTS, ALL_LEVELS, ALL_TOPICS, useIctmEvents, useTopics } from './useFilterOptions'
+import {
+  ALL_EVENTS,
+  ALL_LEVELS,
+  ALL_TOPICS,
+  NSML_TOPICS_BY_GRADE,
+  useIctmEvents,
+  useTopics,
+} from './useFilterOptions'
 import { supabase } from './supabaseClient'
 import { ThemeProvider, useTheme } from './ThemeContext'
 
@@ -102,10 +109,13 @@ type PracticeProps = {
   competition: string
   difficulty: string | null // native label; mapped to a tier here
   topic: string | null
+  // Several topics at once (NSML maps a grade to a set of topics). When given,
+  // this takes precedence over `topic`.
+  topics?: string[] | null
   events: string[] | null // stored comp_event values, or null for no event filter
 }
 
-function Practice({ competition, difficulty, topic, events }: PracticeProps) {
+function Practice({ competition, difficulty, topic, topics, events }: PracticeProps) {
 
   // Year range: bounds come from the data, so the slider widens as more
   // contests are ingested. null bounds = this competition has no year data.
@@ -157,8 +167,10 @@ function Practice({ competition, difficulty, topic, events }: PracticeProps) {
     const params = new URLSearchParams({ competition })
     const tier = toTier(difficulty)
     if (tier) params.set('difficulty', tier)
-    // Options come from the bank, so any selection here is a real tag.
-    if (topic && topic !== ALL_TOPICS) params.set('topic', topic)
+    // Options come from the bank, so any selection here is a real tag. `topics`
+    // (a set, e.g. every topic in a grade) wins over the single `topic`.
+    const topicList = topics ?? (topic && topic !== ALL_TOPICS ? [topic] : [])
+    for (const t of topicList) params.append('topic', t)
     for (const e of events ?? []) params.append('event', e)
     // Only send the range when it's narrower than everything available.
     if (years && bounds && (years[0] > bounds.min || years[1] < bounds.max)) {
@@ -662,10 +674,34 @@ function CompPage({ title, description, competition }: { title: string; descript
 function NsmlPage({ title, description }: { title: string; description: string }) {
   const nsmlDiffs = ['All', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5']
   const [selectedDiff, setSelectedDiff] = useState<string>('All')
-  // The schema has no grade dimension, so this selects nothing today; kept
-  // because NSML data isn't ingested yet and grade is how the meets are run.
-  const [selectedGrade, setSelectedGrade] = useState('10')
+  const [selectedGrade, setSelectedGrade] = useState('9')
   const [selectedTopic, setSelectedTopic] = useState(ALL_TOPICS)
+
+  // Every NSML topic that has problems, then narrowed to the ones belonging to
+  // the chosen grade (in the official nsml.org order). The grade drives which
+  // topics are offered, matching how NSML organizes its meets.
+  const allTopics = useTopics('NSML')
+  const gradeTopicNames = NSML_TOPICS_BY_GRADE[selectedGrade] ?? []
+  const available = gradeTopicNames
+    .map((name) => allTopics.find((t) => t.name === name))
+    .filter((t): t is { name: string; count: number } => !!t)
+
+  // Changing grade always resets the topic, so a stale topic from another grade
+  // can never linger in the (grade-specific) dropdown.
+  function changeGrade(grade: string) {
+    setSelectedGrade(grade)
+    setSelectedTopic(ALL_TOPICS)
+  }
+
+  // A specific topic filters to just that; "All topics" means every topic in the
+  // grade. The sentinel matches nothing, so a grade with no problems stays empty
+  // instead of falling through to the whole competition.
+  const effectiveTopics =
+    selectedTopic !== ALL_TOPICS
+      ? [selectedTopic]
+      : available.length
+        ? available.map((t) => t.name)
+        : [' none']
 
   return (
     <section id="comp-page">
@@ -688,7 +724,7 @@ function NsmlPage({ title, description }: { title: string; description: string }
       <div className="control-row">
         <label className="control-group">
           <span>Grade</span>
-          <select value={selectedGrade} onChange={(e) => setSelectedGrade(e.target.value)}>
+          <select value={selectedGrade} onChange={(e) => changeGrade(e.target.value)}>
             {gradeOptions.map((grade) => (
               <option key={grade} value={grade}>
                 Grade {grade}
@@ -696,10 +732,26 @@ function NsmlPage({ title, description }: { title: string; description: string }
             ))}
           </select>
         </label>
-        <TopicSelect competition="NSML" value={selectedTopic} onChange={setSelectedTopic} />
+        <label className="control-group">
+          <span>Topic</span>
+          <select value={selectedTopic} onChange={(e) => setSelectedTopic(e.target.value)}>
+            <option value={ALL_TOPICS}>{ALL_TOPICS}</option>
+            {available.map((t) => (
+              <option key={t.name} value={t.name}>
+                {t.name} ({t.count})
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
-      <Practice competition="NSML" difficulty={selectedDiff} topic={selectedTopic} events={null} />
+      <Practice
+        competition="NSML"
+        difficulty={selectedDiff}
+        topic={null}
+        topics={effectiveTopics}
+        events={null}
+      />
     </section>
   )
 }

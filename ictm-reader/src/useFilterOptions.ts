@@ -70,6 +70,18 @@ export const ALL_TOPICS = 'All topics'
 export const ALL_LEVELS = 'All levels'
 export const ALL_EVENTS = 'All events'
 
+// The official NSML topic list (nsml.org), grouped by the grade level a student
+// competes at. The grade a user picks maps to these four topics; the topic name
+// (not the ingested comp_event) is what determines the grade. Each grade offers
+// four topics, though the bank only has problems for some of them yet — the UI
+// shows whichever actually have problems. Order matches the official list.
+export const NSML_TOPICS_BY_GRADE: Record<string, string[]> = {
+  '9': ['Number Bases', 'Counting Basics', 'Basic Statistics', 'Applications of Linear Systems'],
+  '10': ['Logic / Sets / Venn Diagrams', 'Geometric Probability', 'Circles', 'Surface Area and Volume (3D)'],
+  '11': ['Modular Arithmetic', 'Probability', 'Geometric Transformations Using Matrices on a Plane', 'Theory of Polynomials'],
+  '12': ['Diophantine Equations', 'Probability', 'Vectors', 'Parametric Equations'],
+}
+
 // Ingestion recorded one round under two names. Folding the odd one in keeps a
 // duplicate out of the dropdown; both values are still queried, so its problems
 // stay reachable. Extend this if more inconsistencies turn up.

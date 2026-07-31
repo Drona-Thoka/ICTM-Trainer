@@ -62,6 +62,17 @@ def _event_clause(event) -> tuple[str, list]:
     return f"p.comp_event IN ({placeholders})", events
 
 
+def _topic_clause(topic) -> tuple[str, list]:
+    """WHERE fragment for one topic or several.
+
+    Several, because one grade selection maps to a set of topics (NSML groups
+    its topics by grade level), so the frontend can send several 'topic' params.
+    """
+    topics = [topic] if isinstance(topic, str) else list(topic)
+    placeholders = ", ".join("?" for _ in topics)
+    return f"t.name IN ({placeholders})", topics
+
+
 def list_topics(
     conn: sqlite3.Connection,
     competition: str | None = None,
@@ -142,7 +153,7 @@ def year_bounds(conn: sqlite3.Connection, competition: str) -> dict:
 
 def _build_filters(
     competition: str | None,
-    topic: str | None,
+    topic: str | list[str] | None,
     difficulty: str | None,
     event: str | list[str] | None,
     year: int | None,
@@ -186,8 +197,9 @@ def _build_filters(
 
     if topic:
         needs_topic_join = True
-        clauses.append("t.name = ?")
-        params.append(topic)
+        frag, frag_params = _topic_clause(topic)
+        clauses.append(frag)
+        params.extend(frag_params)
 
     return " AND ".join(clauses), params, needs_topic_join
 
@@ -204,7 +216,7 @@ def _topic_join(needs_topic_join: bool) -> str:
 def get_random_problem(
     conn: sqlite3.Connection,
     competition: str | None = None,
-    topic: str | None = None,
+    topic: str | list[str] | None = None,
     difficulty: str | None = None,
     event: str | list[str] | None = None,
     year: int | None = None,
