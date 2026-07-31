@@ -815,7 +815,7 @@
   max-width: 100%;
   border-radius: 10px;
   margin: 0 0 16px;
-  background: var(--card-bg);
+  background: #fff;
   padding: 8px;
   border: 1px solid var(--border);
 }

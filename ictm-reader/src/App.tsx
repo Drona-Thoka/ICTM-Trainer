@@ -9,7 +9,7 @@ import { ALL_EVENTS, ALL_LEVELS, ALL_TOPICS, useIctmEvents, useTopics } from './
 import { supabase } from './supabaseClient'
 import { ThemeProvider, useTheme } from './ThemeContext'
 
-const APP_VERSION = '1.0.1'
+const APP_VERSION = '1.0.2'
 
 // ---- API types (see ICTM-Trainer/app.py) ---------------------------------
 
