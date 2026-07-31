@@ -9,7 +9,10 @@ const SENT = String.fromCharCode(0xe000)
 
 // Control characters left by bad OCR (e.g. a backspace from a mangled \bar),
 // excluding tab/newline/carriage-return which are legitimate whitespace.
-const CONTROL_CHARS = new RegExp('[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]', 'g')
+const CONTROL_CHARS = new RegExp(
+  '[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F-\\u009F]',
+  'g'
+)
 
 /**
  * Replace currency dollar signs with a sentinel so they are not parsed as
@@ -117,7 +120,153 @@ function cleanLatex(input: string): string {
   // ---- 8. Convert \mathbb{R} etc. (already supported) ----
   // But KaTeX supports \mathbb, so no change.
 
-  // ---- 9. Remove trailing spaces ----
+  // ---- 9. tabular -> array ----
+  // KaTeX has no tabular environment; array is its substitute.
+  s = s.replace(/\\begin\{tabular\}(\s*\[[bt]\])?/g, '\\begin{array}')
+  s = s.replace(/\\end\{tabular\}/g, '\\end{array}')
+  // strip the [t]/[b] placement argument from any array
+  s = s.replace(/(\\begin\{array\})\s*\[[bt]\]/g, '$1')
+  // strip @{...} column specifiers, which KaTeX does not understand
+  s = s.replace(/@\{((?:[^{}]|\{[^{}]*\})*)\}/g, '')
+
+  // ---- 10. Recover commands mangled by OCR control characters ----
+  // e.g. "<FF>rac{" (from \frac) or "=egin{bmatrix}" (from \begin)
+  s = s.replace(/([^\\A-Za-z])rac\{/g, '$1\\frac{')
+  s = s.replace(/([^\\A-Za-z])egin\{/g, '$1\\begin{')
+  s = s.replace(/([^\\A-Za-z])end\{/g, '$1\\end{')
+  s = s.replace(/(\s)extstyle\{/g, '$1\\textstyle{')
+  s = s.replace(/(\s)ext\{/g, '$1\\text{')
+  // double superscript like ^3^2 (OCR of ^\frac{3}{2}) -> ^{3^{2}}
+  s = s.replace(/\^(\d+)\^(\d+)/g, '^{$1^{$2}}')
+  // \^\\circ -> ^\circ (stray row-break backslash before a command)
+  s = s.replace(/\^\\\\/g, '^\\')
+  // \\end{bmatrix} -> \end{bmatrix} (duplicated row-break backslash)
+  s = s.replace(/\\\\end\{/g, '\\end{')
+
+  // ---- 11. Tabs/newlines inside math are whitespace ----
+  s = s.replace(/[\t\n\r]+/g, ' ')
+
+  // ---- 12. Misc junk that KaTeX rejects ----
+  // stray double-quote characters leaked in from JSON-ish data
+  s = s.replace(/"/g, '')
+  // drop a stray dollar used as a subscript/superscript argument
+  // (e.g. \theta_$_{PT} from bad OCR) so \theta_$_{PT} -> \theta_{PT}
+  s = s.replace(/[_^]\$/g, '')
+  // nested \(...\) inside an already-math segment
+  s = s.replace(/\\\(/g, '')
+  s = s.replace(/\\\)/g, '')
+  // row gap must hug the line break: \\ [0.5ex] -> \\[0.5ex]
+  s = s.replace(/\\\\\s*\[/g, '\\\\[')
+  // merge double superscripts: ^{A}^{B} -> ^{A^{B}}, repeatedly for nesting
+  for (let r = 0; r < 3; r++) {
+    s = s.replace(
+      /\^\{((?:[^{}]|\^\{[^{}]*\})*)\}\^(\d+|\{((?:[^{}]|\^\{[^{}]*\})*)\})/g,
+      (_m, a, b, c) => '^{' + a + '^{' + (c || b) + '}}'
+    )
+  }
+  // escape stray literal dollar signs in math
+  s = s.replace(/(^|[^\\])\$/g, '$1\\$')
+  // underscore/caret inside text-mode font commands are literal
+  for (const cmd of ['text', 'textbf', 'textit', 'textrm', 'textsf', 'texttt', 'mbox', 'mathrm', 'mathbf', 'mathit', 'mathtt', 'mathsf', 'operatorname']) {
+    const re = new RegExp('\\\\' + cmd + '\\{((?:[^{}]|\\{[^{}]*\\})*)\\}', 'g')
+    s = s.replace(re, (m) => m.replace(/_/g, '\\_').replace(/\^/g, '\\textasciicircum'))
+  }
+  // unbalanced \left...\right -> strip the sizing entirely
+  const lc = (s.match(/\\left(?![A-Za-z])/g) || []).length
+  const rc = (s.match(/\\right(?![A-Za-z])/g) || []).length
+  if (lc !== rc) {
+    s = s.replace(/\\left(?![A-Za-z])/g, '').replace(/\\right(?![A-Za-z])/g, '')
+  }
+
+  // ---- 13. Auto-close unclosed environments (truncated segments) ----
+  const envStack: string[] = []
+  const envRe = /\\begin\{([^{}]+)\}|\\end\{([^{}]+)\}/g
+  let em: RegExpExecArray | null
+  while ((em = envRe.exec(s))) {
+    if (em[1]) envStack.push(em[1])
+    else {
+      const idx = envStack.lastIndexOf(em[2])
+      if (idx !== -1) envStack.splice(idx, 1)
+    }
+  }
+  if (envStack.length) s += envStack.reverse().map((e) => '\\end{' + e + '}').join('')
+
+  // ---- 14. Escape & and # that sit outside an environment ----
+  // (inside array/cases/etc they are structure; outside they are literal)
+  {
+    let out = ''
+    let depth = 0
+    for (let k = 0; k < s.length; k++) {
+      if (s.startsWith('\\begin{', k)) {
+        const close = s.indexOf('}', k + 7)
+        depth += 1
+        out += s.slice(k, close + 1)
+        k = close
+        continue
+      }
+      if (s.startsWith('\\end{', k)) {
+        const close = s.indexOf('}', k + 5)
+        depth = Math.max(0, depth - 1)
+        out += s.slice(k, close + 1)
+        k = close
+        continue
+      }
+      const ch = s[k]
+      if (depth === 0 && (ch === '&' || ch === '#') && s[k - 1] !== '\\') out += '\\' + ch
+      else out += ch
+    }
+    s = out
+  }
+
+  // ---- 15. Repair single-argument \frac{X = Y} -> \frac{X}{Y} ----
+  // OCR sometimes drops the second argument and leaves an "=" inside the
+  // braces; splitting at the first top-level "=" at least renders.
+  {
+    let out = ''
+    for (let i = 0; i < s.length; i++) {
+      if (s.startsWith('\\frac{', i)) {
+        let depth = 0
+        let eq = -1
+        let j = i + 6
+        for (; j < s.length; j++) {
+          const ch = s[j]
+          if (ch === '\\') {
+            j += 1
+            continue
+          }
+          if (ch === '{') depth += 1
+          else if (ch === '}') {
+            if (depth === 0) break
+            depth -= 1
+          } else if (ch === '=' && depth === 0 && eq === -1) eq = j
+        }
+        const next = s.slice(j + 1).search(/\S/)
+        const hasSecond = next !== -1 && s[j + 1 + next] === '{'
+        if (eq !== -1 && !hasSecond) {
+          out += s.slice(i, eq) + '}{' + s.slice(eq + 1, j + 1)
+          i = j
+          continue
+        }
+      }
+      out += s[i]
+    }
+    s = out
+  }
+
+  // ---- 16. Close unbalanced braces (truncated segments) ----
+  let open = 0
+  for (let k = 0; k < s.length; k++) {
+    const ch = s[k]
+    if (ch === '\\') {
+      k += 1
+      continue
+    }
+    if (ch === '{') open += 1
+    else if (ch === '}') open -= 1
+  }
+  if (open > 0) s += '}'.repeat(open)
+
+  // ---- 17. Remove trailing spaces ----
   s = s.trim()
 
   return s
@@ -126,12 +275,18 @@ function cleanLatex(input: string): string {
 function renderTeX(tex: string, displayMode: boolean): string {
   try {
     const cleaned = cleanLatex(tex)
-    return katex.renderToString(cleaned, {
+    const html = katex.renderToString(cleaned, {
       displayMode,
       throwOnError: false,
       strict: false,
       // Optionally add macros if needed
     })
+    // If KaTeX could not parse the segment at all, show its (cleaned) source
+    // as plain text instead of a red error span.
+    if (html.includes('katex-error')) {
+      return '<span class="katex-fallback">' + cleaned.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</span>'
+    }
+    return html
   } catch (e) {
     // Fallback: show the original text (safe)
     return tex
@@ -202,10 +357,13 @@ function parseMixed(rawInput: string): ReactNode[] {
         i += 1
         continue
       }
-      // find the next UNESCAPED closing dollar
+      // find the next UNESCAPED closing dollar. A dollar sign used as a
+      // subscript/superscript argument (e.g. the OCR-mangled \theta_$_{PT})
+      // is not a closer — keep scanning past it.
       let j = i + 1
       while (j < n) {
-        if (text[j] === '$' && text[j - 1] !== '\\') break
+        const prev = text[j - 1]
+        if (text[j] === '$' && prev !== '\\' && prev !== '_' && prev !== '^') break
         j += 1
       }
       if (j < n) {
