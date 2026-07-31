@@ -1,8 +1,53 @@
 import type { ReactNode } from 'react'
 import katex from 'katex'
 
-const MATH_RE = /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\$([^$]+?)\$|\\\(([\s\S]+?)\\\)/g
 const LOOKS_MATHY = /[\\^_{}√]/
+
+// Private-use sentinel that stands in for a *literal* dollar sign while we scan,
+// so currency dollars can never be mistaken for math delimiters.
+const SENT = String.fromCharCode(0xe000)
+
+// Control characters left by bad OCR (e.g. a backspace from a mangled \bar),
+// excluding tab/newline/carriage-return which are legitimate whitespace.
+const CONTROL_CHARS = new RegExp('[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]', 'g')
+
+/**
+ * Replace currency dollar signs with a sentinel so they are not parsed as
+ * `$...$` math delimiters. The bank contains no legitimate `$...$` display math;
+ * every stray dollar that hugs a number or is escaped is money, not math.
+ */
+function protectMoney(s: string): string {
+  // $\$12.48$, $$20$, $\$$5$  ->  sentinel + number
+  s = s.replace(/\$[\\$]{1,3}\s*(\d[\d.,]*)\s*\$/g, (_m, n) => SENT + n)
+  // \$8.35  ->  sentinel + number
+  s = s.replace(/\\\$\s*(\d[\d.,]*)/g, (_m, n) => SENT + n)
+  // any leftover escaped dollar -> literal
+  s = s.replace(/\\\$/g, SENT)
+  return s
+}
+
+// Strip LaTeX command tokens (and the sentinel) so their letters are not counted
+// as English prose words.
+function stripLatex(seg: string): string {
+  return seg.replace(/\\[A-Za-z]+/g, ' ').split(SENT).join(' ')
+}
+
+/**
+ * Decide whether the text between two `$` is genuine math or the interior of a
+ * currency phrase (e.g. "$4 per pair and $6 ..."). It is prose (=> currency) only
+ * if, after removing LaTeX commands, two English words appear with a space
+ * between them — a word being >=2 letters that contains a lowercase letter, so
+ * all-caps geometry variables like `AB \cdot CD` or `GF \perp AF` stay math.
+ */
+function isMathSegment(inner: string): boolean {
+  if (inner.trim() === '') return true
+  if (inner.includes('\\text') || inner.includes('\\mbox') || inner.includes('\\begin')) return true
+  const core = stripLatex(inner)
+  if (/(?=[A-Za-z]{2})[A-Za-z]*[a-z][A-Za-z]*\s+(?=[A-Za-z]{2})[A-Za-z]*[a-z][A-Za-z]*/.test(core)) {
+    return false
+  }
+  return true
+}
 
 /**
  * Clean up common OCR mistakes and unsupported LaTeX commands.
@@ -93,24 +138,98 @@ function renderTeX(tex: string, displayMode: boolean): string {
   }
 }
 
-function parseMixed(text: string): ReactNode[] {
+// Turn a math segment's inner TeX into a rendered span. Any sentinel inside math
+// is a literal dollar, so emit it as `\$` for KaTeX.
+function mathSpan(inner: string, display: boolean, key: number): ReactNode {
+  const tex = inner.split(SENT).join('\\$')
+  return <span key={key} dangerouslySetInnerHTML={{ __html: renderTeX(tex, display) }} />
+}
+
+// Restore sentinels to plain dollar signs in a run of literal text.
+function restoreText(s: string): string {
+  return s.split(SENT).join('$')
+}
+
+/**
+ * Split mixed prose + LaTeX into React nodes. A hand-written scanner (rather than
+ * one big regex) so currency dollars — protected up front as sentinels — never
+ * open a spurious math span, which was rendering prose in spaceless math mode.
+ */
+function parseMixed(rawInput: string): ReactNode[] {
+  const raw = rawInput.replace(CONTROL_CHARS, '')
+  const text = protectMoney(raw)
   const nodes: ReactNode[] = []
-  let last = 0
   let key = 0
-  MATH_RE.lastIndex = 0
-  for (let m = MATH_RE.exec(text); m !== null; m = MATH_RE.exec(text)) {
-    if (m.index > last) nodes.push(text.slice(last, m.index))
-    const display = m[1] !== undefined || m[2] !== undefined
-    const tex = m[1] ?? m[2] ?? m[3] ?? m[4] ?? ''
-    nodes.push(
-      <span
-        key={key++}
-        dangerouslySetInnerHTML={{ __html: renderTeX(tex, display) }}
-      />,
-    )
-    last = m.index + m[0].length
+  let buf = ''
+  const flush = () => {
+    if (buf) {
+      nodes.push(restoreText(buf))
+      buf = ''
+    }
   }
-  if (last < text.length) nodes.push(text.slice(last))
+  const n = text.length
+  let i = 0
+  while (i < n) {
+    const c = text[i]
+    if (c === '\\' && text[i + 1] === '[') {
+      const j = text.indexOf('\\]', i + 2)
+      if (j !== -1) {
+        flush()
+        nodes.push(mathSpan(text.slice(i + 2, j), true, key++))
+        i = j + 2
+        continue
+      }
+    }
+    if (c === '\\' && text[i + 1] === '(') {
+      const j = text.indexOf('\\)', i + 2)
+      if (j !== -1) {
+        flush()
+        nodes.push(mathSpan(text.slice(i + 2, j), false, key++))
+        i = j + 2
+        continue
+      }
+    }
+    if (c === '$') {
+      if (text[i + 1] === '$') {
+        const j = text.indexOf('$$', i + 2)
+        if (j !== -1) {
+          flush()
+          nodes.push(mathSpan(text.slice(i + 2, j), true, key++))
+          i = j + 2
+          continue
+        }
+        buf += '$'
+        i += 1
+        continue
+      }
+      // find the next UNESCAPED closing dollar
+      let j = i + 1
+      while (j < n) {
+        if (text[j] === '$' && text[j - 1] !== '\\') break
+        j += 1
+      }
+      if (j < n) {
+        const inner = text.slice(i + 1, j)
+        if (isMathSegment(inner)) {
+          flush()
+          nodes.push(mathSpan(inner, false, key++))
+          i = j + 1
+          continue
+        }
+        // opener is a currency dollar — keep it literal and move on
+        buf += '$'
+        i += 1
+        continue
+      }
+      // no closing dollar at all — literal
+      buf += '$'
+      i += 1
+      continue
+    }
+    buf += c
+    i += 1
+  }
+  flush()
   return nodes
 }
 
