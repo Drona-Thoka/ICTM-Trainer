@@ -988,21 +988,26 @@ function App() {
     <ThemeProvider>
       <div className="app-shell">
         <header className="app-header">
-          <div className="header-left">
-            <ProfileAvatar user={user} />
+          {/* On mobile this wrapper becomes a full-width colored bar above the
+              brand; on desktop `display: contents` lets its children flow into
+              the header's 3-column grid unchanged. */}
+          <div className="header-controls">
+            <div className="header-left">
+              <ProfileAvatar user={user} />
+            </div>
+            <div className="header-right">
+              {/* Only meaningful once signed in — stats are per-account. */}
+              {user && (
+                <Link to="/stats" className="nav-button header-progress">
+                  My progress
+                </Link>
+              )}
+              <ThemeToggle />
+            </div>
           </div>
           <div className="brand-block">
             <div className="brand">ICTM Trainer</div>
             <div className="brand-subtitle">Math competition practice hub</div>
-          </div>
-          <div className="header-right">
-            {/* Only meaningful once signed in — stats are per-account. */}
-            {user && (
-              <Link to="/stats" className="nav-button header-progress">
-                My progress
-              </Link>
-            )}
-            <ThemeToggle />
           </div>
         </header>
 

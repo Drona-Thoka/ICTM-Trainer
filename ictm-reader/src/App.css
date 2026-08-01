@@ -155,6 +155,13 @@
   gap: 18px;
 }
 
+/* Wrapper is transparent to layout on desktop: its children (left/right) drop
+   straight into the header grid. It only becomes a real box (the colored bar)
+   at the mobile breakpoint below. */
+.header-controls {
+  display: contents;
+}
+
 .header-left {
   grid-area: left;
   justify-self: start;
@@ -1034,24 +1041,40 @@ body {
   }
 
   .app-header {
-    /* Controls on top row (avatar left, actions right); brand centered below. */
-    grid-template-columns: auto 1fr;
-    grid-template-areas:
-      'left right'
-      'brand brand';
-    row-gap: 12px;
-    column-gap: 10px;
-    padding: 12px;
-    text-align: center;
+    /* Stack: colored controls bar on top, centered brand below. */
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    gap: 0;
   }
 
-  .brand-block {
-    justify-self: center;
+  /* The controls become their own full-width colored bar. */
+  .header-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 14px;
+    gap: 10px;
+    background: var(--gold);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .header-left,
+  .header-right {
+    justify-self: auto;
   }
 
   .header-right {
     flex-wrap: wrap;
     justify-content: flex-end;
+  }
+
+  .brand-block {
+    align-self: center;
+    padding: 12px;
+    text-align: center;
   }
 
   /* Keep the signed-in card compact so it doesn't crowd the actions. */
