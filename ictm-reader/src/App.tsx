@@ -524,7 +524,11 @@ function ProfileAvatar({ user }: { user: any }) {
   if (!user) {
     return (
       <Link to="/auth" className="profile-avatar" title="Sign in">
-        <span className="avatar-inner">{initials}</span>
+        <span className="avatar-inner" aria-label="Sign in">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
+            <path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z" />
+          </svg>
+        </span>
       </Link>
     )
   }
@@ -983,18 +987,18 @@ function App() {
   return (
     <ThemeProvider>
       <div className="app-shell">
-        <header className="app-header" style={{ justifyContent: 'center', position: 'relative' }}>
-          <div style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)' }}>
+        <header className="app-header">
+          <div className="header-left">
             <ProfileAvatar user={user} />
           </div>
           <div className="brand-block">
             <div className="brand">ICTM Trainer</div>
             <div className="brand-subtitle">Math competition practice hub</div>
           </div>
-          <div style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className="header-right">
             {/* Only meaningful once signed in — stats are per-account. */}
             {user && (
-              <Link to="/stats" className="nav-button" style={{ minWidth: 'auto', padding: '8px 14px' }}>
+              <Link to="/stats" className="nav-button header-progress">
                 My progress
               </Link>
             )}
