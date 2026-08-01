@@ -155,8 +155,9 @@ def _build_filters(
     competition: str | None,
     topic: str | list[str] | None,
     difficulty: str | None,
-    event: str | list[str] | None,
-    year: int | None,
+    difficulty_native: str | None = None,
+    event: str | list[str] | None = None,
+    year: int | None = None,
     year_min: int | None = None,
     year_max: int | None = None,
 ) -> tuple[str, list, bool]:
@@ -164,6 +165,11 @@ def _build_filters(
 
     Returns (where_sql, params, needs_topic_join). Always constrains to approved
     problems. `needs_topic_join` tells the caller to join problem_topics/topics.
+
+    `difficulty_native` matches the stored comp_difficulty label exactly (NSML
+    "Q1".."Q5"), which the tiered `difficulty` filter cannot do because it folds
+    several native labels into one tier. When both are given, the exact label
+    wins.
     """
     clauses = ["p.review_status = 'approved'"]
     params: list = []
@@ -173,7 +179,10 @@ def _build_filters(
         clauses.append("c.short_name = ?")
         params.append(competition)
 
-    if difficulty:
+    if difficulty_native:
+        clauses.append("p.comp_difficulty = ?")
+        params.append(difficulty_native)
+    elif difficulty:
         frag, frag_params = difficulty_sql(difficulty)  # raises ValueError on bad tier
         clauses.append(frag)
         params.extend(frag_params)
@@ -218,6 +227,7 @@ def get_random_problem(
     competition: str | None = None,
     topic: str | list[str] | None = None,
     difficulty: str | None = None,
+    difficulty_native: str | None = None,
     event: str | list[str] | None = None,
     year: int | None = None,
     year_min: int | None = None,
@@ -225,7 +235,7 @@ def get_random_problem(
 ) -> sqlite3.Row | None:
     """One random approved problem matching the filters, or None if none match."""
     where, params, needs_topic_join = _build_filters(
-        competition, topic, difficulty, event, year, year_min, year_max
+        competition, topic, difficulty, difficulty_native, event, year, year_min, year_max
     )
     sql = f"""
         SELECT {_PROBLEM_COLUMNS}

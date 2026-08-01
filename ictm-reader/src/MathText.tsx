@@ -9,10 +9,8 @@ const SENT = String.fromCharCode(0xe000)
 
 // Control characters left by bad OCR (e.g. a backspace from a mangled \bar),
 // excluding tab/newline/carriage-return which are legitimate whitespace.
-const CONTROL_CHARS = new RegExp(
-  '[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F-\\u009F]',
-  'g'
-)
+// eslint-disable-next-line no-control-regex -- control chars are exactly what this strips
+const CONTROL_CHARS = new RegExp('[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F-\\u009F]', 'g')
 
 /**
  * Replace currency dollar signs with a sentinel so they are not parsed as
@@ -287,7 +285,7 @@ function renderTeX(tex: string, displayMode: boolean): string {
       return '<span class="katex-fallback">' + cleaned.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</span>'
     }
     return html
-  } catch (e) {
+  } catch {
     // Fallback: show the original text (safe)
     return tex
   }

@@ -159,30 +159,39 @@ def get_summary(user_id: str) -> dict:
     for r in rows:
         comp = r["competition"]
         comp_map.setdefault(comp, []).append(r)
-    by_competition = [
-        {**{"competition": comp}, **compute_stats(records)}
-        for comp, records in comp_map.items()
-    ]
+    by_competition = sorted(
+        (
+            {**{"competition": comp}, **compute_stats(records)}
+            for comp, records in comp_map.items()
+        ),
+        key=lambda d: d["competition"].lower(),
+    )
 
     # --- By topic (all competitions combined) ---
     topic_map = {}
     for r in rows:
         topic = r["topic"]
         topic_map.setdefault(topic, []).append(r)
-    by_topic = [
-        {**{"topic": topic}, **compute_stats(records)}
-        for topic, records in topic_map.items()
-    ]
+    by_topic = sorted(
+        ({**{"topic": topic}, **compute_stats(records)} for topic, records in topic_map.items()),
+        key=lambda d: d["topic"].lower(),
+    )
 
     # --- By difficulty ---
     diff_map = {}
     for r in rows:
         diff = r["difficulty"]
         diff_map.setdefault(diff, []).append(r)
-    by_difficulty = [
-        {**{"difficulty": diff}, **compute_stats(records)}
-        for diff, records in diff_map.items()
-    ]
+    diff_order = ["easy", "medium", "hard"]
+    by_difficulty = sorted(
+        (
+            {**{"difficulty": diff}, **compute_stats(records)}
+            for diff, records in diff_map.items()
+        ),
+        key=lambda d: diff_order.index(d["difficulty"])
+        if d["difficulty"] in diff_order
+        else len(diff_order),
+    )
 
     return {
         "overall": overall,

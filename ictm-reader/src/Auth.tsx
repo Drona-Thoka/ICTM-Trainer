@@ -1,5 +1,6 @@
-﻿﻿import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import type { User } from '@supabase/supabase-js'
 import { supabase } from './supabaseClient'
 import PasswordFields, { inputStyle, passwordProblem } from './PasswordFields'
 
@@ -10,7 +11,7 @@ export default function Auth() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
 
@@ -33,10 +34,8 @@ export default function Auth() {
     return () => {
       mounted = false
       try {
-        const sub = (resp as any).data?.subscription ?? (resp as any).data ?? resp
-        if (sub && typeof sub.unsubscribe === 'function') sub.unsubscribe()
-        else if (sub && typeof sub.subscription?.unsubscribe === 'function') sub.subscription.unsubscribe()
-      } catch (e) {
+        resp.data?.subscription?.unsubscribe()
+      } catch {
         // ignore
       }
     }
@@ -148,7 +147,7 @@ export default function Auth() {
                   border: '2px solid #16a34a',
                 }}
               >
-                {getInitials(user.email)}
+                {getInitials(user.email ?? '')}
               </div>
               <div style={{ textAlign: 'left' }}>
                 <div style={{ fontSize: '1.2rem', fontWeight: '600', color: 'var(--text-h)' }}>

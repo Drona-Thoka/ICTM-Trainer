@@ -19,21 +19,20 @@ function hashError(hash: string): string | null {
   return params.get('error_description')?.replace(/\+/g, ' ') ?? 'This reset link is not valid.'
 }
 
+// Stable per page load — computed at module scope so components and effects can
+// both rely on it without an effect having to setState for it.
+const INITIAL_ERROR = hashError(INITIAL_HASH)
+
 type Status = 'checking' | 'ready' | 'invalid' | 'saving' | 'done'
 
 export default function ResetPassword() {
-  const [status, setStatus] = useState<Status>('checking')
-  const [message, setMessage] = useState<string | null>(null)
+  const [status, setStatus] = useState<Status>(INITIAL_ERROR ? 'invalid' : 'checking')
+  const [message, setMessage] = useState<string | null>(INITIAL_ERROR)
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
 
   useEffect(() => {
-    const linkError = hashError(INITIAL_HASH)
-    if (linkError) {
-      setMessage(linkError)
-      setStatus('invalid')
-      return
-    }
+    if (INITIAL_ERROR) return
 
     let settled = false
 

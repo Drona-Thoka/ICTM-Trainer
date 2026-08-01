@@ -117,6 +117,8 @@ def create_app() -> Flask:
             # Repeatable: one grade selection can cover several NSML topics.
             topic=request.args.getlist("topic") or None,
             difficulty=request.args.get("difficulty"),
+            # Exact native label (NSML Q1..Q5); overrides the tiered difficulty.
+            difficulty_native=request.args.get("difficulty_native"),
             event=request.args.getlist("event") or None,
             year=request.args.get("year", type=int),
             year_min=request.args.get("year_min", type=int),

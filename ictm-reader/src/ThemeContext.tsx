@@ -32,6 +32,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- hooks are the whole point of this file
 export const useTheme = () => {
   const context = useContext(ThemeContext)
   if (!context) throw new Error('useTheme must be used within a ThemeProvider')

@@ -5,6 +5,7 @@ import { useState } from 'react'
 // gives a clearer message than a round trip does.
 export const MIN_PASSWORD_LENGTH = 8
 
+// eslint-disable-next-line react-refresh/only-export-components -- shared validation helper
 export function passwordProblem(password: string, confirm: string): string | null {
   if (password.length < MIN_PASSWORD_LENGTH) {
     return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`
@@ -15,6 +16,7 @@ export function passwordProblem(password: string, confirm: string): string | nul
 
 // Theme-aware: --input-bg / --text-h are defined for light, dark and system
 // (index.css), so these stay legible whichever theme is active.
+// eslint-disable-next-line react-refresh/only-export-components -- shared style constant
 export const inputStyle: React.CSSProperties = {
   width: '100%',
   padding: '10px 12px',

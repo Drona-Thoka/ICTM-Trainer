@@ -15,8 +15,9 @@ import {
 } from './useFilterOptions'
 import { supabase } from './supabaseClient'
 import { ThemeProvider, useTheme } from './ThemeContext'
+import type { User } from '@supabase/supabase-js'
 
-const APP_VERSION = '1.0.3'
+const APP_VERSION = '1.1.0'
 
 // ---- API types (see ICTM-Trainer/app.py) ---------------------------------
 
@@ -112,10 +113,13 @@ type PracticeProps = {
   difficulty: string | null // native label; mapped to a tier here
   topic: string | null
   topics?: string[] | null // explicit multi-topic filter (NSML grade groups); overrides `topic`
+  // Exact native comp_difficulty label (NSML "Q1".."Q5"). When given, it wins
+  // over the tiered `difficulty` so "Q3" means Q3, not the whole medium tier.
+  difficultyNative?: string | null
   events: string[] | null // stored comp_event values, or null for no event filter
 }
 
-function Practice({ competition, difficulty, topic, topics, events }: PracticeProps) {
+function Practice({ competition, difficulty, topic, topics, difficultyNative, events }: PracticeProps) {
 
   // Year range: bounds come from the data, so the slider widens as more
   // contests are ingested. null bounds = this competition has no year data.
@@ -136,10 +140,11 @@ function Practice({ competition, difficulty, topic, topics, events }: PracticePr
   // that window would otherwise find no row id and silently do nothing.
   const recordRef = useRef<Promise<string | number | null> | null>(null)
 
-  // Timer state
-  const [startTime, setStartTime] = useState<number | null>(null)
+  // Timer state. startTime is a ref (not state) so the ticking interval never
+  // holds a stale closure, and no effect needs to call setState.
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const timerIntervalRef = useRef<number | null>(null)
+  const startTimeRef = useRef<number | null>(null)
 
   // Helper to format seconds as MM:SS
   const formatTime = (totalSeconds: number) => {
@@ -152,8 +157,6 @@ function Practice({ competition, difficulty, topic, topics, events }: PracticePr
 
   useEffect(() => {
     let cancelled = false
-    setBounds(null)
-    setYears(null)
     fetch(`/api/years?competition=${encodeURIComponent(competition)}`)
       .then((r) => r.json())
       .then((b: { min: number | null; max: number | null }) => {
@@ -173,7 +176,7 @@ function Practice({ competition, difficulty, topic, topics, events }: PracticePr
       clearInterval(timerIntervalRef.current)
       timerIntervalRef.current = null
     }
-    setStartTime(null)
+    startTimeRef.current = null
     setElapsedSeconds(0)
     setResult(null) // ensure timer stops if result existed
 
@@ -186,8 +189,14 @@ function Practice({ competition, difficulty, topic, topics, events }: PracticePr
     recordRef.current = null
 
     const params = new URLSearchParams({ competition })
-    const tier = toTier(difficulty)
-    if (tier) params.set('difficulty', tier)
+    // NSML's Q1..Q5 buttons filter the exact native label; every other
+    // competition maps its labels onto the easy/medium/hard tiers.
+    if (difficultyNative) {
+      params.set('difficulty_native', difficultyNative)
+    } else {
+      const tier = toTier(difficulty)
+      if (tier) params.set('difficulty', tier)
+    }
     // Options come from the bank, so any selection here is a real tag.
     // `topics` (an explicit list) takes precedence over the single `topic`;
     // an empty list means no topic filter at all.
@@ -209,6 +218,7 @@ function Practice({ competition, difficulty, topic, topics, events }: PracticePr
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
       setProblem(await res.json())
       setStatus('idle')
+      startTimeRef.current = Date.now()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error')
       setStatus('error')
@@ -222,6 +232,8 @@ function Practice({ competition, difficulty, topic, topics, events }: PracticePr
     try {
       const session = (await supabase.auth.getSession()).data.session
       if (!session) return null
+      const t0 = startTimeRef.current
+      const timeTaken = t0 ? Math.max(1, Math.round((Date.now() - t0) / 1000)) : null
       const rec = await fetch('/api/stats/record', {
         method: 'POST',
         headers: {
@@ -234,6 +246,7 @@ function Practice({ competition, difficulty, topic, topics, events }: PracticePr
           topic: p.topics[0] || 'Unknown',
           difficulty: p.difficulty,
           correct,
+          time_taken: timeTaken,
         }),
       })
       if (!rec.ok) return null
@@ -248,16 +261,10 @@ function Practice({ competition, difficulty, topic, topics, events }: PracticePr
   // Timer effect: start when problem is loaded and not yet checked
   useEffect(() => {
     if (problem && !result) {
-      // Start timer if not already started
-      if (!startTime) {
-        setStartTime(Date.now())
-      }
-      // Set up interval to update elapsed seconds
       if (timerIntervalRef.current === null) {
         timerIntervalRef.current = window.setInterval(() => {
-          if (startTime) {
-            setElapsedSeconds((Date.now() - startTime) / 1000)
-          }
+          const t0 = startTimeRef.current
+          if (t0) setElapsedSeconds((Date.now() - t0) / 1000)
         }, 200) // update every 200ms for smoothness
       }
     } else {
@@ -268,9 +275,12 @@ function Practice({ competition, difficulty, topic, topics, events }: PracticePr
       }
     }
     return () => {
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current)
+        timerIntervalRef.current = null
+      }
     }
-  }, [problem, result, startTime])
+  }, [problem, result])
 
   async function submitAnswer() {
     if (!problem || !answer.trim() || result) return
@@ -383,7 +393,7 @@ function Practice({ competition, difficulty, topic, topics, events }: PracticePr
         <span className="score-badge" aria-live="polite">
           <strong>{score.correct}</strong> / {score.total} &middot; {accuracy}%
         </span>
-        {problem && !result && startTime && <span className="timer-badge">{formatTime(elapsedSeconds)}</span>}
+        {problem && !result && <span className="timer-badge">{formatTime(elapsedSeconds)}</span>}
       </div>
 
       <div className="question-card">
@@ -518,7 +528,7 @@ function Practice({ competition, difficulty, topic, topics, events }: PracticePr
 
 // ---- Profile Avatar (top-left header with mini welcome card) -------------
 
-function ProfileAvatar({ user }: { user: any }) {
+function ProfileAvatar({ user }: { user: User | null }) {
   const initials = user?.email ? getInitials(user.email) : 'U'
 
   if (!user) {
@@ -534,11 +544,11 @@ function ProfileAvatar({ user }: { user: any }) {
   }
 
   return (
-    <Link to="/auth" className="profile-avatar-card" title={user.email}>
+    <Link to="/auth" className="profile-avatar-card" title={user.email ?? ''}>
       <span className="avatar-inner">{initials}</span>
       <div className="user-info">
         <span className="welcome-label">Welcome,</span>
-        <span className="user-name">{user.email.split('@')[0]}</span>
+        <span className="user-name">{user.email?.split('@')[0]}</span>
       </div>
     </Link>
   )
@@ -622,7 +632,7 @@ function ThemeToggle() {
 
 // ---- Home ----------------------------------------------------------------
 
-function Home({ user }: { user: any }) {
+function Home({ user }: { user: User | null }) {
   async function handleSignOut() {
     await supabase.auth.signOut()
   }
@@ -649,7 +659,7 @@ function Home({ user }: { user: any }) {
                   border: '2px solid #16a34a',
                 }}
               >
-                {getInitials(user.email)}
+                {getInitials(user.email ?? '')}
               </div>
               <div style={{ textAlign: 'left' }}>
                 <div style={{ fontSize: '1.2rem', fontWeight: '600', color: 'var(--text-h)' }}>
@@ -825,7 +835,8 @@ function NsmlPage({ title, description }: { title: string; description: string }
 
       <Practice
         competition="NSML"
-        difficulty={selectedDiff}
+        difficulty={null}
+        difficultyNative={selectedDiff === 'All' ? null : selectedDiff}
         topic={null}
         topics={effectiveTopics}
         events={null}
@@ -959,7 +970,7 @@ function HomeButton() {
 // ---- App shell -----------------------------------------------------------
 
 function App() {
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<User | null>(null)
   const location = useLocation()
   const showHomeButton = location.pathname !== '/'
 
@@ -976,9 +987,8 @@ function App() {
     return () => {
       mounted = false
       try {
-        const s = (sub as any)?.subscription ?? sub
-        if (s && typeof s.unsubscribe === 'function') s.unsubscribe()
-      } catch (e) {
+        sub.subscription.unsubscribe()
+      } catch {
         // ignore
       }
     }

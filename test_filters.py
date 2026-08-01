@@ -17,9 +17,12 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 
 from app import create_app
+import config
+import queries
 
 app = create_app()
 client = app.test_client()
+conn = queries.get_connection(config.DB_PATH)
 failures = []
 
 
@@ -125,6 +128,41 @@ r = client.get("/api/problems/random?competition=AIME&topic=Relay%20Practice")
 check("a made-up topic yields 404, not a random problem", r.status_code == 404, r.status_code)
 offered = {t["name"] for t in client.get("/api/topics?competition=AIME").get_json()}
 check("made-up topic is absent from the options", "Relay Practice" not in offered)
+
+print("\n-- NSML grade mapping: exact Q filter + grade topics --")
+CANONICAL_NSML = {
+    "Number Bases", "Counting Basics", "Basic Statistics", "Applications of Linear Systems",
+    "Logic / Sets / Venn Diagrams", "Geometric Probability", "Circles",
+    "Surface Area and Volume (3D)",
+    "Modular Arithmetic", "Probability", "Geometric Transformations Using Matrices on a Plane",
+    "Theory of Polynomials",
+    "Diophantine Equations", "Vectors", "Parametric Equations",
+}
+nsml_topics = {t["name"] for t in client.get("/api/topics?competition=NSML").get_json()}
+check("NSML topics are the canonical nsml.org set", nsml_topics == CANONICAL_NSML, nsml_topics)
+
+# "Q3" must mean Q3, not the whole medium tier (Q3+Q4).
+r = client.get("/api/problems/random?competition=NSML&difficulty_native=Q3")
+check("exact native difficulty filters to that question", r.status_code == 200, r.status_code)
+if r.status_code == 200:
+    row = queries.get_problem_by_id(conn, r.get_json()["problem_id"])
+    check("native Q3 problem is actually Q3", row["comp_difficulty"] == "Q3", row["comp_difficulty"])
+
+# A grade maps to a set of topics (the UI sends them all as repeated params).
+for topics in [
+    ["Number Bases", "Counting Basics", "Basic Statistics", "Applications of Linear Systems"],
+    ["Logic / Sets / Venn Diagrams", "Geometric Probability", "Circles",
+     "Surface Area and Volume (3D)"],
+    ["Modular Arithmetic", "Probability", "Geometric Transformations Using Matrices on a Plane",
+     "Theory of Polynomials"],
+    ["Diophantine Equations", "Probability", "Vectors", "Parametric Equations"],
+]:
+    qs = "&".join(f"topic={t.replace(' ', '%20')}" for t in topics)
+    r = client.get(f"/api/problems/random?competition=NSML&{qs}")
+    check(f"grade topics {topics[0]}.. return problems", r.status_code == 200, r.status_code)
+    if r.status_code == 200:
+        body = r.get_json()
+        check("returned problem belongs to the grade", body["topics"][0] in topics, body["topics"])
 
 print()
 if failures:
