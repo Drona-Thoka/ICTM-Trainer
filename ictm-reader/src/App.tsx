@@ -17,7 +17,7 @@ import { supabase } from './supabaseClient'
 import { ThemeProvider, useTheme } from './ThemeContext'
 import type { User } from '@supabase/supabase-js'
 
-const APP_VERSION = '1.1.1'
+const APP_VERSION = '1.1.2'
 
 // ---- API types (see ICTM-Trainer/app.py) ---------------------------------
 
