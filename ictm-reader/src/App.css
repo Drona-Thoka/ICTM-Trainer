@@ -1046,6 +1046,9 @@ body {
     flex-direction: column;
     padding: 0;
     gap: 0;
+    /* Scroll away with the page — a sticky title eats the little vertical
+       room a phone has. */
+    position: static;
   }
 
   /* The controls become their own full-width colored bar. */

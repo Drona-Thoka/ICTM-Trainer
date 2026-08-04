@@ -160,11 +160,23 @@ function Practice({ competition, difficulty, topic, topics, difficultyNative, ev
     fetch(`/api/years?competition=${encodeURIComponent(competition)}`)
       .then((r) => r.json())
       .then((b: { min: number | null; max: number | null }) => {
-        if (cancelled || b.min == null || b.max == null) return
+        if (cancelled) return
+        if (b.min == null || b.max == null) {
+          // No year data for this competition: clear any bounds left over from
+          // the previous one, or its range would silently filter everything.
+          setBounds(null)
+          setYears(null)
+          return
+        }
         setBounds({ min: b.min, max: b.max })
         setYears([b.min, b.max])
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (!cancelled) {
+          setBounds(null)
+          setYears(null)
+        }
+      })
     return () => {
       cancelled = true
     }
@@ -283,7 +295,7 @@ function Practice({ competition, difficulty, topic, topics, difficultyNative, ev
   }, [problem, result])
 
   async function submitAnswer() {
-    if (!problem || !answer.trim() || result) return
+    if (!problem || !answer.trim() || result || checking) return
     setChecking(true)
     try {
       const res = await fetch(`/api/problems/${problem.problem_id}/check`, {
@@ -449,7 +461,7 @@ function Practice({ competition, difficulty, topic, topics, difficultyNative, ev
                     <button
                       key={letter}
                       type="button"
-                      disabled={graded}
+                      disabled={graded || checking}
                       className={`choice ${answer === letter ? 'selected' : ''} ${
                         graded && result!.correct_answer?.toUpperCase() === letter ? 'is-answer' : ''
                       }`}
@@ -781,13 +793,18 @@ function NsmlPage({ title, description }: { title: string; description: string }
   }
 
   // What we actually send: the one chosen topic, else the grade's whole set,
-  // else null (no grade + no topic = everything, no topic filter).
+  // else null (no grade + no topic = everything, no topic filter). If the
+  // grade has no ingested topics at all, send its canonical list anyway — an
+  // empty list would silently mean "no topic filter" and pull problems from
+  // other grades; the canonical list at least filters to nothing, honestly.
   const effectiveTopics =
     selectedTopic !== ALL_TOPICS
       ? [selectedTopic]
       : selectedGrade === ALL_GRADES
         ? null
-        : topicOptions
+        : topicOptions.length > 0
+          ? topicOptions
+          : NSML_TOPICS_BY_GRADE[selectedGrade] ?? null
 
   return (
     <section id="comp-page">

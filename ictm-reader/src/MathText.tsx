@@ -127,6 +127,15 @@ function cleanLatex(input: string): string {
   // strip @{...} column specifiers, which KaTeX does not understand
   s = s.replace(/@\{((?:[^{}]|\{[^{}]*\})*)\}/g, '')
 
+  // ---- 9b. eqnarray/eqnarray* -> align/align* ----
+  // KaTeX has no eqnarray environment. align* is its closest equivalent;
+  // eqnarray's "=&=" double alignment point becomes "&=" in align.
+  s = s.replace(/\\begin\{eqnarray\*\}/g, '\\begin{align*}')
+  s = s.replace(/\\end\{eqnarray\*\}/g, '\\end{align*}')
+  s = s.replace(/\\begin\{eqnarray\}/g, '\\begin{align}')
+  s = s.replace(/\\end\{eqnarray\}/g, '\\end{align}')
+  s = s.replace(/=&=/g, '&=')
+
   // ---- 10. Recover commands mangled by OCR control characters ----
   // e.g. "<FF>rac{" (from \frac) or "=egin{bmatrix}" (from \begin)
   s = s.replace(/([^\\A-Za-z])rac\{/g, '$1\\frac{')
@@ -155,6 +164,10 @@ function cleanLatex(input: string): string {
   s = s.replace(/\\\)/g, '')
   // row gap must hug the line break: \\ [0.5ex] -> \\[0.5ex]
   s = s.replace(/\\\\\s*\[/g, '\\\\[')
+  // "\\[ABCD]" is a row break followed by an area label, not a spacing arg —
+  // KaTeX would try to parse "[ABCD]" as a vertical size and fail. \cr takes
+  // no optional argument, so the label renders literally after the break.
+  s = s.replace(/\\\\(\[[^0-9+\-.\]][^\]]*\])/g, '\\cr$1')
   // merge double superscripts: ^{A}^{B} -> ^{A^{B}}, repeatedly for nesting
   for (let r = 0; r < 3; r++) {
     s = s.replace(
@@ -303,6 +316,51 @@ function restoreText(s: string): string {
   return s.split(SENT).join('$')
 }
 
+// KaTeX can typeset these environments, so a \begin{...} with no $...$ / \[...\]
+// wrapper can still be rendered as display math. Anything not in this list
+// (itemize, enumerate, ...) stays literal prose.
+const MATH_ENVS = new Set([
+  'align', 'align*', 'aligned', 'alignat', 'alignat*', 'alignedat',
+  'array', 'matrix', 'pmatrix', 'bmatrix', 'Bmatrix', 'vmatrix', 'Vmatrix',
+  'smallmatrix', 'cases', 'dcases', 'rcases',
+  'equation', 'equation*', 'eqnarray', 'eqnarray*',
+  'gather', 'gather*', 'gathered', 'multline', 'multline*', 'split',
+  'tabular',
+])
+
+/**
+ * Index just past the matching \end{<env>} for a \begin{<env>} at `from`,
+ * tracking same-name nesting, or -1 when it never closes.
+ */
+function findEnvEnd(s: string, from: number, env: string): number {
+  let depth = 0
+  let i = from
+  const n = s.length
+  while (i < n) {
+    if (s.startsWith('\\begin{', i)) {
+      const close = s.indexOf('}', i + 7)
+      if (close !== -1) {
+        if (s.slice(i + 7, close) === env) depth += 1
+        i = close + 1
+        continue
+      }
+    }
+    if (s.startsWith('\\end{', i)) {
+      const close = s.indexOf('}', i + 5)
+      if (close !== -1) {
+        if (s.slice(i + 5, close) === env) {
+          depth -= 1
+          if (depth === 0) return close + 1
+        }
+        i = close + 1
+        continue
+      }
+    }
+    i += 1
+  }
+  return -1
+}
+
 /**
  * Split mixed prose + LaTeX into React nodes. A hand-written scanner (rather than
  * one big regex) so currency dollars — protected up front as sentinels — never
@@ -324,7 +382,10 @@ function parseMixed(rawInput: string): ReactNode[] {
   let i = 0
   while (i < n) {
     const c = text[i]
-    if (c === '\\' && text[i + 1] === '[') {
+    // A `[` or `(` after `\\` is a line-break spacing arg (\\[5pt]), not a
+    // display-math delimiter — only scan as math when the backslash is not
+    // itself preceded by one.
+    if (c === '\\' && text[i + 1] === '[' && text[i - 1] !== '\\') {
       const j = text.indexOf('\\]', i + 2)
       if (j !== -1) {
         flush()
@@ -333,12 +394,26 @@ function parseMixed(rawInput: string): ReactNode[] {
         continue
       }
     }
-    if (c === '\\' && text[i + 1] === '(') {
+    if (c === '\\' && text[i + 1] === '(' && text[i - 1] !== '\\') {
       const j = text.indexOf('\\)', i + 2)
       if (j !== -1) {
         flush()
         nodes.push(mathSpan(text.slice(i + 2, j), false, key++))
         i = j + 2
+        continue
+      }
+    }
+    if (c === '\\' && text.startsWith('\\begin{', i)) {
+      // Naked environment — "\begin{align*} ... \end{align*}" with no $...$ or
+      // \[...\] wrapper. ~400 solutions in the bank are written this way;
+      // without this branch the whole block renders as raw LaTeX prose.
+      const close = text.indexOf('}', i + 7)
+      const env = close === -1 ? '' : text.slice(i + 7, close)
+      const end = MATH_ENVS.has(env) ? findEnvEnd(text, i, env) : -1
+      if (end !== -1) {
+        flush()
+        nodes.push(mathSpan(text.slice(i, end), true, key++))
+        i = end
         continue
       }
     }

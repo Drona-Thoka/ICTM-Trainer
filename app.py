@@ -194,6 +194,11 @@ def create_app() -> Flask:
         if body["difficulty"] not in ("easy", "medium", "hard"):
             return jsonify({"error": "Invalid difficulty"}), 400
 
+        # JSON true/false -> Python True/False; anything else ("false" as a
+        # string, 1, 0) is not a verdict and must not be stored as one.
+        if not isinstance(body["correct"], bool):
+            return jsonify({"error": "Invalid correct value"}), 400
+
         record = record_attempt(
             user_id=user_id,
             problem_id=body["problem_id"],
