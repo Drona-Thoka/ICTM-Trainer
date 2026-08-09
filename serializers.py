@@ -10,6 +10,7 @@ from __future__ import annotations  # `X | None` hints on older serverless Pytho
 
 import json
 import sqlite3
+from functools import lru_cache
 from pathlib import PurePosixPath
 
 import config
@@ -36,6 +37,9 @@ def _image_url(image_path: str | None) -> str | None:
     return f"{config.IMAGE_BASE_URL}/{rel}"
 
 
+# Choices are static per problem and parsed on every read (serialize + check),
+# so cache by the raw string.
+@lru_cache(maxsize=2048)
 def _choices(choices_json: str | None) -> dict | None:
     """Parse the stored choices ({"A": "...", ..., "E": "..."}) if present."""
     if not choices_json:

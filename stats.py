@@ -144,50 +144,47 @@ def get_summary(user_id: str) -> dict:
             "by_difficulty": []
         }
 
-    # --- Helper: compute stats from a list of records ---
-    def compute_stats(records):
-        total = len(records)
-        correct = sum(1 for r in records if r["correct"])
-        accuracy = round((correct / total) * 100, 1) if total > 0 else 0
-        return {"attempts": total, "correct": correct, "accuracy": accuracy}
-
-    # --- Overall ---
-    overall = compute_stats(rows)
-
-    # --- By competition ---
-    comp_map = {}
+    # One pass over the rows builds the overall totals and every per-group
+    # total at once (the old code re-visited each record once per grouping).
+    overall = {"attempts": len(rows), "correct": 0}
+    comp: dict[str, list[int]] = {}
+    topic: dict[str, list[int]] = {}
+    diff: dict[str, list[int]] = {}
     for r in rows:
-        comp = r["competition"]
-        comp_map.setdefault(comp, []).append(r)
+        ok = 1 if r["correct"] else 0
+        overall["correct"] += ok
+        for groups, key in (
+            (comp, r["competition"]),
+            (topic, r["topic"]),
+            (diff, r["difficulty"]),
+        ):
+            agg = groups.get(key)
+            if agg is None:
+                groups[key] = agg = [0, 0]
+            agg[0] += 1
+            agg[1] += ok
+    overall["accuracy"] = round((overall["correct"] / overall["attempts"]) * 100, 1)
+
+    def stats(total: int, correct: int) -> dict:
+        return {
+            "attempts": total,
+            "correct": correct,
+            "accuracy": round((correct / total) * 100, 1) if total > 0 else 0,
+        }
+
+    def to_list(groups: dict[str, list[int]], key_name: str) -> list[dict]:
+        return [
+            {key_name: key, **stats(total, correct)}
+            for key, (total, correct) in groups.items()
+        ]
+
     by_competition = sorted(
-        (
-            {**{"competition": comp}, **compute_stats(records)}
-            for comp, records in comp_map.items()
-        ),
-        key=lambda d: d["competition"].lower(),
+        to_list(comp, "competition"), key=lambda d: d["competition"].lower()
     )
-
-    # --- By topic (all competitions combined) ---
-    topic_map = {}
-    for r in rows:
-        topic = r["topic"]
-        topic_map.setdefault(topic, []).append(r)
-    by_topic = sorted(
-        ({**{"topic": topic}, **compute_stats(records)} for topic, records in topic_map.items()),
-        key=lambda d: d["topic"].lower(),
-    )
-
-    # --- By difficulty ---
-    diff_map = {}
-    for r in rows:
-        diff = r["difficulty"]
-        diff_map.setdefault(diff, []).append(r)
+    by_topic = sorted(to_list(topic, "topic"), key=lambda d: d["topic"].lower())
     diff_order = ["easy", "medium", "hard"]
     by_difficulty = sorted(
-        (
-            {**{"difficulty": diff}, **compute_stats(records)}
-            for diff, records in diff_map.items()
-        ),
+        to_list(diff, "difficulty"),
         key=lambda d: diff_order.index(d["difficulty"])
         if d["difficulty"] in diff_order
         else len(diff_order),

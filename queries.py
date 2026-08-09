@@ -8,7 +8,9 @@ app must never write to it. Only review_status = 'approved' problems are served.
 
 from __future__ import annotations  # `X | None` hints on older serverless Pythons
 
+import random
 import sqlite3
+import time
 from pathlib import Path
 
 from difficulty import difficulty_sql
@@ -21,6 +23,30 @@ _PROBLEM_COLUMNS = """
     p.comp_difficulty, c.short_name AS competition, c.name AS competition_name,
     c.answer_format
 """
+
+# The bank DB is opened read-only, so it can't carry indexes on review_status or
+# the filter columns — every filtered query above is a full scan, and the scans
+# grow as ingestion proceeds. The app's hot paths (random problem, topic
+# dropdowns) repeat the same filter combos constantly, so cache the small result
+# sets per combo. TTL-bounded because the bank keeps ingesting under a running
+# server.
+_CACHE_TTL_S = 60.0
+_CACHE_MAX_ENTRIES = 64
+_cache: dict[tuple, tuple[float, object]] = {}
+
+
+def _cache_get(key: tuple) -> object | None:
+    entry = _cache.get(key)
+    if entry is None or entry[0] < time.monotonic():
+        return None
+    return entry[1]
+
+
+def _cache_put(key: tuple, value: object) -> None:
+    if len(_cache) >= _CACHE_MAX_ENTRIES:
+        oldest = min(_cache, key=lambda k: _cache[k][0])
+        del _cache[oldest]
+    _cache[key] = (time.monotonic() + _CACHE_TTL_S, value)
 
 
 def get_connection(db_path: Path) -> sqlite3.Connection:
@@ -88,6 +114,13 @@ def list_topics(
     clauses = ["p.review_status = 'approved'"]
     params: list = []
 
+    # The frontend refetches this on every filter change / page mount; the
+    # underlying data only moves with ingestion, so cache briefly.
+    key = ("topics", competition, tuple(event) if event else None)
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+
     if competition:
         clauses.append("c.short_name = ?")
         params.append(competition)
@@ -109,7 +142,9 @@ def list_topics(
         """,
         params,
     ).fetchall()
-    return [{"name": r["name"], "count": r["count"]} for r in rows]
+    result = [{"name": r["name"], "count": r["count"]} for r in rows]
+    _cache_put(key, result)
+    return result
 
 
 def list_events(conn: sqlite3.Connection, competition: str) -> list[str]:
@@ -233,20 +268,33 @@ def get_random_problem(
     year_min: int | None = None,
     year_max: int | None = None,
 ) -> sqlite3.Row | None:
-    """One random approved problem matching the filters, or None if none match."""
+    """One random approved problem matching the filters, or None if none match.
+
+    The matching problem_ids are scanned once per filter combo, then cached for
+    _CACHE_TTL_S and picked from in Python with random.choice — repeat "New
+    problem" clicks cost a 0.02ms PK lookup instead of a full-scan ORDER BY
+    RANDOM(). Uniform over the matching set, exactly like the old query.
+    """
     where, params, needs_topic_join = _build_filters(
         competition, topic, difficulty, difficulty_native, event, year, year_min, year_max
     )
-    sql = f"""
-        SELECT {_PROBLEM_COLUMNS}
+    from_sql = f"""
         FROM problems p
         JOIN competitions c ON c.competition_id = p.competition_id
         {_topic_join(needs_topic_join)}
         WHERE {where}
-        ORDER BY RANDOM()
-        LIMIT 1
     """
-    return conn.execute(sql, params).fetchone()
+    key = (where, tuple(params), needs_topic_join)
+    ids = _cache_get(key)
+    if ids is None:
+        ids = tuple(
+            r[0]
+            for r in conn.execute(f"SELECT p.problem_id {from_sql}", params)
+        )
+        _cache_put(key, ids)
+    if not ids:
+        return None
+    return get_problem_by_id(conn, random.choice(ids))
 
 
 def get_problem_by_id(conn: sqlite3.Connection, problem_id: int) -> sqlite3.Row | None:

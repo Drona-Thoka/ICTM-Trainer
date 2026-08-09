@@ -281,7 +281,7 @@ function Practice({ competition, difficulty, topic, topics, difficultyNative, ev
         timerIntervalRef.current = window.setInterval(() => {
           const t0 = startTimeRef.current
           if (t0) setElapsedSeconds((Date.now() - t0) / 1000)
-        }, 200) // update every 200ms for smoothness
+        }, 1000) // update every second — the badge only shows whole seconds
       }
     } else {
       // No problem or already graded: stop interval

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { memo, type ReactNode } from 'react'
 import katex from 'katex'
 
 const LOOKS_MATHY = /[\\^_{}√]/
@@ -479,7 +479,7 @@ type Props = {
   className?: string
 }
 
-export default function MathText({ children, math, className }: Props) {
+function MathText({ children, math, className }: Props) {
   const text = children ?? ''
 
   if (math) {
@@ -497,3 +497,8 @@ export default function MathText({ children, math, className }: Props) {
 
   return <span className={`mathtext ${className ?? ''}`}>{parseMixed(text)}</span>
 }
+
+// Memoize: the LaTeX cleanup + KaTeX render is the most expensive work on the
+// page, and all props are primitives, so an unchanged string must not be
+// re-rendered (e.g. on every practice-page timer tick).
+export default memo(MathText)

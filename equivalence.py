@@ -24,6 +24,7 @@ honored (0.374 == 0.3740, but 70.4832 != 70.48).
 import math
 import re
 from fractions import Fraction
+from functools import lru_cache
 
 _REL_TOL = 1e-6
 _ABS_TOL = 1e-9
@@ -56,6 +57,7 @@ def _load_sympy():
 _SAFE_EXPR = re.compile(r"[0-9a-zA-Z+\-*/(). ,_]*")
 
 
+@lru_cache(maxsize=4096)
 def _squash(s: str) -> str:
     """Whitespace-stripped, lowercased form for exact comparison. Removing all
     whitespace (not just collapsing) lets '(10, 6)' == '(10,6)'."""
@@ -77,6 +79,10 @@ def _clean_number_str(s: str) -> str:
     return _sci_to_e(s).strip()
 
 
+# Pure string -> value transforms, cached so repeated checks of the same stored
+# answers (the common case) skip re-parsing entirely. The SymPy parse, at
+# ~5ms a call, is the most expensive thing in this module.
+@lru_cache(maxsize=8192)
 def _to_number(s: str):
     """Parse a plain numeric string to Fraction (exact) or float, else None."""
     s = _clean_number_str(s)
@@ -92,6 +98,7 @@ def _to_number(s: str):
         return None
 
 
+@lru_cache(maxsize=8192)
 def _normalize_latex(s: str):
     """LaTeX-ish -> a plain expression SymPy can parse, or None if it can't be
     made safe. Conservative: unhandled markup leaves a stray char and fails the
@@ -123,6 +130,7 @@ def _normalize_latex(s: str):
     return t
 
 
+@lru_cache(maxsize=8192)
 def _to_expr_value(s: str):
     """Parse a possibly-symbolic answer and evaluate it to a real float, or None.
 
@@ -155,6 +163,7 @@ def _any_number(s: str):
     return n if n is not None else _to_expr_value(s)
 
 
+@lru_cache(maxsize=2048)
 def _split_accepted(stored: str) -> list[str]:
     """Expand a stored field into the individual accepted forms.
 
