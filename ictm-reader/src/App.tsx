@@ -17,7 +17,7 @@ import { supabase } from './supabaseClient'
 import { ThemeProvider, useTheme } from './ThemeContext'
 import type { User } from '@supabase/supabase-js'
 
-const APP_VERSION = '1.1.2' 
+const APP_VERSION = '1.1.3' 
 // 0.0.X is small changes and bugfixes.
 // 0.X.0 is new features and large bug fixes.
 // X.0.0 is whole revamps. 
