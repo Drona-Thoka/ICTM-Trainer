@@ -63,6 +63,7 @@ export default function ResetPassword() {
     }, 3000)
 
     return () => {
+      settled = true
       clearTimeout(timer)
       sub?.subscription?.unsubscribe()
     }
@@ -77,13 +78,18 @@ export default function ResetPassword() {
     }
     setStatus('saving')
     setMessage(null)
-    const { error } = await supabase.auth.updateUser({ password })
-    if (error) {
-      setMessage(error.message)
+    try {
+      const { error } = await supabase.auth.updateUser({ password })
+      if (error) {
+        setMessage(error.message)
+        setStatus('ready')
+        return
+      }
+      setStatus('done')
+    } catch {
+      setMessage('Unable to connect. Please try again.')
       setStatus('ready')
-      return
     }
-    setStatus('done')
   }
 
   const card = (children: React.ReactNode) => (

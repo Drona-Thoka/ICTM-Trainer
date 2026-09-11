@@ -1,8 +1,9 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from './supabaseClient'
 import PasswordFields, { inputStyle, passwordProblem } from './PasswordFields'
+import { getAuthRedirectUrl } from './authRedirect'
 
 // Progress lives on /stats (StatsPage), which shows the full breakdown
 // including difficulty and every topic. This page handles the account only.
@@ -18,6 +19,26 @@ export default function Auth() {
   const [mode, setMode] = useState<'signin' | 'forgot'>('signin')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+
+  const redirectUrl = (path = '/') =>
+    getAuthRedirectUrl(
+      import.meta.env.VITE_SITE_URL || 'https://ictm-trainer.vercel.app',
+      window.location.origin,
+      path,
+    )
+
+  async function runAuth(action: () => Promise<void>) {
+    if (loading) return
+    setLoading(true)
+    setMessage(null)
+    try {
+      await action()
+    } catch {
+      setMessage('Unable to connect. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
     let mounted = true
@@ -43,49 +64,52 @@ export default function Auth() {
 
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
-    setMessage(null)
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: window.location.origin,
-      },
+    const form = (e.currentTarget as HTMLElement).closest('form')
+    if (form && !form.reportValidity()) return
+    const problem = passwordProblem(password, password)
+    if (problem) {
+      setMessage(problem)
+      return
+    }
+    await runAuth(async () => {
+      const { error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          emailRedirectTo: redirectUrl(),
+        },
+      })
+      if (error) setMessage(error.message)
+      else setMessage('Check your email for confirmation (if enabled).')
     })
-    setLoading(false)
-    if (error) setMessage(error.message)
-    else setMessage('Check your email for confirmation (if enabled).')
   }
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
-    setMessage(null)
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    setLoading(false)
-    if (error) {
-      setMessage(error.message)
-    } else {
-      setMessage('Signed in')
-      navigate('/')
-    }
+    await runAuth(async () => {
+      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
+      if (error) {
+        setMessage(error.message)
+      } else {
+        setMessage('Signed in')
+        navigate('/')
+      }
+    })
   }
 
   async function handleForgotPassword(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
-    setMessage(null)
-    // Origin-derived so this works in dev and production without a build-time
-    // constant. The URL must also be allowlisted in Supabase's Redirect URLs,
-    // or Supabase ignores it and sends the user to the Site URL instead.
-    await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+    await runAuth(async () => {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: redirectUrl('/reset-password'),
+      })
+      if (error) {
+        setMessage('Unable to send a reset email. Please try again in a few minutes.')
+        return
+      }
+      // Keep the success response identical whether or not the account exists.
+      setMessage('If an account exists for that email, a reset link is on its way.')
     })
-    setLoading(false)
-    // Deliberately the same response whether or not the account exists —
-    // Supabase does not distinguish, and neither should our UI, or it becomes
-    // an account-enumeration oracle.
-    setMessage('If an account exists for that email, a reset link is on its way.')
   }
 
   async function handleChangePassword(e: React.FormEvent) {
@@ -95,23 +119,28 @@ export default function Auth() {
       setMessage(problem)
       return
     }
-    setLoading(true)
-    setMessage(null)
-    const { error } = await supabase.auth.updateUser({ password: newPassword })
-    setLoading(false)
-    if (error) {
-      setMessage(error.message)
-      return
-    }
-    setNewPassword('')
-    setConfirmPassword('')
-    setMessage('Password updated.')
+    await runAuth(async () => {
+      const { error } = await supabase.auth.updateUser({ password: newPassword })
+      if (error) {
+        setMessage(error.message)
+        return
+      }
+      setNewPassword('')
+      setConfirmPassword('')
+      setMessage('Password updated.')
+    })
   }
 
   async function handleSignOut() {
-    await supabase.auth.signOut()
-    setMessage('Signed out')
-    setUser(null)
+    await runAuth(async () => {
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        setMessage('Unable to sign out. Please try again.')
+        return
+      }
+      setMessage('Signed out')
+      setUser(null)
+    })
   }
 
   const getInitials = (email: string) => {
@@ -163,7 +192,7 @@ export default function Auth() {
               <Link to="/stats" className="nav-button primary">
                 View your progress
               </Link>
-              <button className="nav-button" onClick={handleSignOut}>
+              <button className="nav-button" onClick={handleSignOut} disabled={loading}>
                 Sign out
               </button>
             </div>
@@ -198,6 +227,8 @@ export default function Auth() {
               Email
               <input
                 type="email"
+                required
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 style={inputStyle}
@@ -225,6 +256,8 @@ export default function Auth() {
               Email
               <input
                 type="email"
+                required
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 style={inputStyle}
@@ -234,6 +267,7 @@ export default function Auth() {
               Password
               <input
                 type="password"
+                required
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -246,7 +280,6 @@ export default function Auth() {
                 type="submit"
                 className="nav-button primary"
                 disabled={loading}
-                onClick={handleSignIn}
               >
                 {loading ? 'Signing in…' : 'Sign in'}
               </button>
@@ -283,7 +316,7 @@ export default function Auth() {
         )}
 
         {message && (
-          <p style={{ marginTop: '16px', color: 'var(--accent)' }}>{message}</p>
+          <p role="status" style={{ marginTop: '16px', color: 'var(--accent)' }}>{message}</p>
         )}
       </div>
     </section>
