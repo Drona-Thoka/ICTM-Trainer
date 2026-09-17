@@ -14,12 +14,11 @@ const CONTROL_CHARS = new RegExp('[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\
 
 /**
  * Replace currency dollar signs with a sentinel so they are not parsed as
- * `$...$` math delimiters. The bank contains no legitimate `$...$` display math;
- * every stray dollar that hugs a number or is escaped is money, not math.
+ * math delimiters. Preserve double-dollar display equations, including numbers.
  */
 function protectMoney(s: string): string {
-  // $\$12.48$, $$20$, $\$$5$  ->  sentinel + number
-  s = s.replace(/\$[\\$]{1,3}\s*(\d[\d.,]*)\s*\$/g, (_m, n) => SENT + n)
+  // Only explicitly escaped currency can be unwrapped unambiguously.
+  s = s.replace(/(?<!\$)\$\\\$\s*(\d[\d.,]*)\s*\$(?!\$)/g, (_m, n) => SENT + n)
   // \$8.35  ->  sentinel + number
   s = s.replace(/\\\$\s*(\d[\d.,]*)/g, (_m, n) => SENT + n)
   // any leftover escaped dollar -> literal
@@ -55,7 +54,10 @@ function isMathSegment(inner: string): boolean {
  * Extend this function as new issues appear.
  */
 function cleanLatex(input: string): string {
-  let s = input
+  let s = input.replace(CONTROL_CHARS, '')
+
+  // Older NSML imports use infix n \binom{k}; standard TeX needs two arguments.
+  s = s.replace(/(\d+)\s*\\binom\{([^{}]+)\}(?!\s*\{)/g, '\\binom{$1}{$2}')
 
   // ---- 1. Fix OCR errors ----
   // \text{frac} -> \frac
@@ -283,6 +285,10 @@ function cleanLatex(input: string): string {
   return s
 }
 
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 function renderTeX(tex: string, displayMode: boolean): string {
   try {
     const cleaned = cleanLatex(tex)
@@ -300,7 +306,7 @@ function renderTeX(tex: string, displayMode: boolean): string {
     return html
   } catch {
     // Fallback: show the original text (safe)
-    return tex
+    return escapeHtml(tex)
   }
 }
 
@@ -314,6 +320,98 @@ function mathSpan(inner: string, display: boolean, key: number): ReactNode {
 // Restore sentinels to plain dollar signs in a run of literal text.
 function restoreText(s: string): string {
   return s.split(SENT).join('$')
+}
+
+// Imported NSML text sometimes omits math delimiters altogether. Read balanced
+// TeX atoms, stopping at prose words, rather than putting an entire sentence in
+// math mode (which loses spaces and italicizes the explanation).
+function texAtomEnd(s: string, start: number): number {
+  let i = start
+  if (s[i] === '{') {
+    let depth = 1
+    for (i++; i < s.length; i++) {
+      if (s[i] === '\\') { i++; continue }
+      if (s[i] === '{') depth++
+      if (s[i] === '}' && --depth === 0) return i + 1
+    }
+    return start
+  }
+  const command = /^\\([A-Za-z]+|[{},;! ])/.exec(s.slice(i))
+  if (command) {
+    if (/^(begin|end|item|n)$/.test(command[1])) return start
+    i += command[0].length
+    // Include optional arguments (e.g. the index of a cube root).
+    if (command[1] === 'sqrt' && s[i] === '[') {
+      const end = s.indexOf(']', i + 1)
+      if (end !== -1) i = end + 1
+    }
+    const arity = /^(frac|dfrac|tfrac|binom)$/.test(command[1]) ? 2
+      : /^(sqrt|text|textbf|textit|textrm|emph|mathrm|mathbf|mathit|operatorname|overline|underline|vec|boxed|pmod|hspace)$/.test(command[1]) ? 1 : 0
+    for (let a = 0; a < arity; a++) {
+      const arg = i + (s.slice(i).match(/^\s*/)?.[0].length ?? 0)
+      const end = texAtomEnd(s, arg)
+      if (end === arg) return start
+      i = end
+    }
+  } else {
+    const token = /^(?:\d+(?:\.\d+)?|[A-Za-z]+|[+−\-*/=<>()[\]|,:])/.exec(s.slice(i))
+    if (!token || (/^[A-Za-z]{2,}$/.test(token[0]) && !/^[A-Z]+$/.test(token[0]))) return start
+    i += token[0].length
+  }
+  while (s[i] === '^' || s[i] === '_') {
+    const end = texAtomEnd(s, i + 1)
+    if (end === i + 1) break
+    i = end
+  }
+  return i
+}
+
+function parseLoose(s: string, nextKey: () => number): ReactNode[] {
+  const nodes: ReactNode[] = []
+  // Outside math, TeX spacing and line breaks are text whitespace.
+  s = s.replace(/\\newline\b|\\n\b|\\\\/g, '\n').replace(/\\ /g, ' ')
+    .replace(/\\(?:begin|end)\{itemize\}/g, '\n')
+    .replace(/\\item\b/g, '\n• ')
+    .replace(/\\([%&#])/g, '$1')
+  let literal = ''
+  for (let i = 0; i < s.length;) {
+    // Do not begin a math run in the middle of an English word.
+    if (i > 0 && /[A-Za-z]/.test(s[i - 1])) { literal += s[i++]; continue }
+    let end = texAtomEnd(s, i)
+    if (end === i) { literal += s[i++]; continue }
+    while (end < s.length) {
+      const start = end + (s.slice(end).match(/^\s*/)?.[0].length ?? 0)
+      const next = texAtomEnd(s, start)
+      if (next === start) break
+      end = next
+    }
+    const run = s.slice(i, end)
+    let validMath = /\\[A-Za-z]+|[_^](?:\{|[A-Za-z0-9\\])/.test(run)
+    if (validMath) {
+      try {
+        katex.renderToString(cleanLatex(run), { throwOnError: true, strict: false })
+      } catch {
+        validMath = false
+      }
+    }
+    if (validMath) {
+      if (literal) { nodes.push(literal); literal = '' }
+      nodes.push(mathSpan(run, false, nextKey()))
+    } else literal += run
+    i = end
+  }
+  if (literal) nodes.push(literal)
+  return nodes
+}
+
+function hasOpenGroup(s: string): boolean {
+  let depth = 0
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '\\') { i++; continue }
+    if (s[i] === '{') depth++
+    if (s[i] === '}') depth = Math.max(0, depth - 1)
+  }
+  return depth > 0
 }
 
 // KaTeX can typeset these environments, so a \begin{...} with no $...$ / \[...\]
@@ -374,7 +472,7 @@ function parseMixed(rawInput: string): ReactNode[] {
   let buf = ''
   const flush = () => {
     if (buf) {
-      nodes.push(restoreText(buf))
+      nodes.push(...parseLoose(restoreText(buf), () => key++))
       buf = ''
     }
   }
@@ -382,6 +480,18 @@ function parseMixed(rawInput: string): ReactNode[] {
   let i = 0
   while (i < n) {
     const c = text[i]
+    // Text commands outside math are prose, including nested inline formulas.
+    const formatting = c === '\\' ? /^\\(text|textbf|textit|emph)\s*\{/.exec(text.slice(i)) : null
+    if (formatting && !hasOpenGroup(buf)) {
+      const start = i + formatting[0].length - 1
+      const end = texAtomEnd(text, start)
+      flush()
+      const Tag = formatting[1] === 'textbf' ? 'strong'
+        : /^(textit|emph)$/.test(formatting[1]) ? 'em' : 'span'
+      nodes.push(<Tag key={key++}>{parseMixed(text.slice(start + 1, end === start ? n : end - 1))}</Tag>)
+      i = end === start ? n : end
+      continue
+    }
     // A `[` or `(` after `\\` is a line-break spacing arg (\\[5pt]), not a
     // display-math delimiter — only scan as math when the backslash is not
     // itself preceded by one.
@@ -486,7 +596,7 @@ function MathText({ children, math, className }: Props) {
     if (!LOOKS_MATHY.test(text)) {
       return <span className={className}>{text}</span>
     }
-    const cleaned = cleanLatex(stripDelimiters(text))
+    const cleaned = stripDelimiters(text)
     return (
       <span
         className={className}
