@@ -124,7 +124,13 @@ check("vercel entry point exists", (_root / "api" / "index.py").is_file())
 check("vercel.json exists", (_root / "vercel.json").is_file())
 # Not just *.png — the bank holds .jpeg too.
 _imgs = [p for p in (_root / "ictm-reader" / "public" / "images").rglob("*") if p.is_file()]
-check("diagram images are staged for the CDN", len(_imgs) > 900, len(_imgs))
+import queries
+with queries.get_connection(_snapshot) as snapshot_conn:
+    expected_images = queries.public_image_paths(snapshot_conn)
+staged_images = {p.relative_to(_root / "ictm-reader" / "public" / "images").as_posix() for p in _imgs}
+check("available diagrams are staged for the CDN", bool(expected_images) and expected_images <= staged_images,
+      sorted(expected_images - staged_images))
+check("removed competition diagrams are absent", not any(p.startswith(("ictm/", "nsml/")) for p in staged_images))
 
 print("\n-- stats layer degrades safely without Supabase --")
 import os

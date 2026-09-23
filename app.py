@@ -1,4 +1,4 @@
-﻿"""
+"""
 app.py — JSON API for the ICTM-Trainer web app.
 
 Read-only Flask service over the (separate, still-ingesting) problem bank at
@@ -26,10 +26,6 @@ def create_app() -> Flask:
     app = Flask(__name__)
     # The frontend is served from a different origin in dev (Vite on :5173).
     CORS(app, resources={r"/api/*": {"origins": "*"}})
-
-    @app.before_request
-    def unavailable():
-        abort(404)
 
     def get_db():
         if "db" not in g:
@@ -178,6 +174,8 @@ def create_app() -> Flask:
 
     @app.get("/api/images/<path:filename>")
     def image(filename):
+        if filename not in queries.public_image_paths(get_db()):
+            abort(404)
         # send_from_directory rejects path-traversal attempts.
         return send_from_directory(config.IMAGES_DIR, filename)
 

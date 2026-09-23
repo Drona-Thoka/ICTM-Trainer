@@ -65,14 +65,14 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
 
 def count_approved(conn: sqlite3.Connection) -> int:
     row = conn.execute(
-        "SELECT COUNT(*) AS n FROM problems WHERE review_status = 'approved'"
+        "SELECT COUNT(*) AS n FROM problems p JOIN competitions c USING (competition_id) WHERE p.review_status = 'approved' AND c.short_name NOT IN ('ICTM', 'NSML')"
     ).fetchone()
     return row["n"]
 
 
 def list_competitions(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     return conn.execute(
-        "SELECT short_name, name, answer_format FROM competitions ORDER BY short_name"
+        "SELECT short_name, name, answer_format FROM competitions WHERE short_name NOT IN ('ICTM', 'NSML') ORDER BY short_name"
     ).fetchall()
 
 
@@ -111,7 +111,7 @@ def list_topics(
     table alone offers filters that silently match nothing. Narrowing by
     competition/event keeps each page's options honest.
     """
-    clauses = ["p.review_status = 'approved'"]
+    clauses = ["p.review_status = 'approved'", "c.short_name NOT IN ('ICTM', 'NSML')"]
     params: list = []
 
     # The frontend refetches this on every filter change / page mount; the
@@ -157,7 +157,7 @@ def list_events(conn: sqlite3.Connection, competition: str) -> list[str]:
         SELECT DISTINCT p.comp_event
         FROM problems p
         JOIN competitions c ON c.competition_id = p.competition_id
-        WHERE c.short_name = ?
+        WHERE c.short_name = ? AND c.short_name NOT IN ('ICTM', 'NSML')
           AND p.review_status = 'approved'
           AND p.comp_event IS NOT NULL
         ORDER BY p.comp_event
@@ -177,7 +177,7 @@ def year_bounds(conn: sqlite3.Connection, competition: str) -> dict:
         SELECT MIN(p.comp_year) AS min_year, MAX(p.comp_year) AS max_year
         FROM problems p
         JOIN competitions c ON c.competition_id = p.competition_id
-        WHERE c.short_name = ?
+        WHERE c.short_name = ? AND c.short_name NOT IN ('ICTM', 'NSML')
           AND p.review_status = 'approved'
           AND p.comp_year IS NOT NULL
         """,
@@ -206,7 +206,7 @@ def _build_filters(
     several native labels into one tier. When both are given, the exact label
     wins.
     """
-    clauses = ["p.review_status = 'approved'"]
+    clauses = ["p.review_status = 'approved'", "c.short_name NOT IN ('ICTM', 'NSML')"]
     params: list = []
     needs_topic_join = False
 
@@ -304,6 +304,7 @@ def get_problem_by_id(conn: sqlite3.Connection, problem_id: int) -> sqlite3.Row 
         FROM problems p
         JOIN competitions c ON c.competition_id = p.competition_id
         WHERE p.problem_id = ? AND p.review_status = 'approved'
+          AND c.short_name NOT IN ('ICTM', 'NSML')
     """
     return conn.execute(sql, (problem_id,)).fetchone()
 
@@ -320,3 +321,14 @@ def get_topics_for_problem(conn: sqlite3.Connection, problem_id: int) -> list[st
         (problem_id,),
     ).fetchall()
     return [r["name"] for r in rows]
+
+
+def public_image_paths(conn: sqlite3.Connection) -> set[str]:
+    """Diagram paths belonging to available competitions."""
+    rows = conn.execute("""
+        SELECT p.image_path FROM problems p
+        JOIN competitions c USING (competition_id)
+        WHERE c.short_name NOT IN ('ICTM', 'NSML')
+          AND p.image_path IS NOT NULL
+    """)
+    return {row[0].replace("\\", "/").removeprefix("images/") for row in rows}

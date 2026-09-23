@@ -5,14 +5,7 @@ import './App.css'
 import Auth from './Auth'
 import StatsPage from './StatsPage'
 import ResetPassword from './ResetPassword'
-import {
-  ALL_EVENTS,
-  ALL_LEVELS,
-  ALL_TOPICS,
-  NSML_TOPICS_BY_GRADE,
-  useIctmEvents,
-  useTopics,
-} from './useFilterOptions'
+import { ALL_TOPICS, useTopics } from './useFilterOptions'
 import { supabase } from './supabaseClient'
 import { ThemeProvider, useTheme } from './ThemeContext'
 import type { User } from '@supabase/supabase-js'
@@ -50,14 +43,6 @@ type CheckResult = {
 // curated topic/event lists that used to live here had drifted out of sync with
 // the data and silently filtered nothing; git history has them if the curated
 // taxonomy is ever revived.
-const gradeOptions = ['9', '10', '11', '12']
-
-// ICTM team events are graded as a whole round, so per-topic filtering is
-// meaningless there — the topic control is hidden for them.
-function isTeamEvent(event: string | null): boolean {
-  return !!event && /team|person/i.test(event)
-}
-
 /** Topic <select> driven by whatever the bank actually has tagged. */
 function TopicSelect({
   competition,
@@ -697,7 +682,7 @@ function Home({ user }: { user: User | null }) {
           </>
         ) : (
           <>
-            <h1 style={{ marginTop: 0 }}>Learn AMC, AIME, NSML, and ICTM.</h1>
+            <h1 style={{ marginTop: 0 }}>Learn AMC and AIME.</h1>
             <p className="hero-copy">
               Practice real past-contest problems by competition, topic, and difficulty. Answer, check
               your work, and reveal full solutions. Pick a competition below to begin.
@@ -761,194 +746,6 @@ function CompPage({ title, description, competition }: { title: string; descript
       </div>
 
       <Practice competition={competition} difficulty={diff} topic={selectedTopic} events={null} />
-    </section>
-  )
-}
-
-// ---- NSML (grade + Q1–Q5 + topics) ----------------------------------------
-
-const ALL_GRADES = 'All grades'
-
-function NsmlPage({ title, description }: { title: string; description: string }) {
-  const nsmlDiffs = ['All', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5']
-  const [selectedDiff, setSelectedDiff] = useState<string>('All')
-  // NSML has no grade column; grade is a lens over the topic tags. Each grade
-  // maps to a fixed set of canonical topics (NSML_TOPICS_BY_GRADE).
-  const [selectedGrade, setSelectedGrade] = useState(ALL_GRADES)
-  const [selectedTopic, setSelectedTopic] = useState(ALL_TOPICS)
-
-  // Only offer topics that actually have approved problems in the bank.
-  const existing = useTopics('NSML')
-  const existingSet = useMemo(() => new Set(existing.map((t) => t.name)), [existing])
-
-  // The topic list the dropdown shows: just this grade's topics, or — with no
-  // grade chosen — every NSML topic. Filtered to what's actually ingested.
-  const topicOptions = useMemo(() => {
-    const pool =
-      selectedGrade === ALL_GRADES
-        ? Array.from(new Set(Object.values(NSML_TOPICS_BY_GRADE).flat()))
-        : NSML_TOPICS_BY_GRADE[selectedGrade] ?? []
-    return pool.filter((t) => existingSet.has(t))
-  }, [selectedGrade, existingSet])
-
-  function changeGrade(grade: string) {
-    setSelectedGrade(grade)
-    setSelectedTopic(ALL_TOPICS) // a grade's topic list differs, so reset
-  }
-
-  // What we actually send: the one chosen topic, else the grade's whole set,
-  // else null (no grade + no topic = everything, no topic filter). If the
-  // grade has no ingested topics at all, send its canonical list anyway — an
-  // empty list would silently mean "no topic filter" and pull problems from
-  // other grades; the canonical list at least filters to nothing, honestly.
-  const effectiveTopics =
-    selectedTopic !== ALL_TOPICS
-      ? [selectedTopic]
-      : selectedGrade === ALL_GRADES
-        ? null
-        : topicOptions.length > 0
-          ? topicOptions
-          : NSML_TOPICS_BY_GRADE[selectedGrade] ?? null
-
-  return (
-    <section id="comp-page">
-      <h1>{title}</h1>
-      <p>{description}</p>
-
-      <div className="diff-buttons">
-        {nsmlDiffs.map((d) => (
-          <button
-            key={d}
-            type="button"
-            className={`diff-button ${selectedDiff === d ? 'active' : ''}`}
-            onClick={() => setSelectedDiff(d)}
-          >
-            {d}
-          </button>
-        ))}
-      </div>
-
-      <div className="control-row">
-        <label className="control-group">
-          <span>Grade</span>
-          <select value={selectedGrade} onChange={(e) => changeGrade(e.target.value)}>
-            <option value={ALL_GRADES}>{ALL_GRADES}</option>
-            {gradeOptions.map((grade) => (
-              <option key={grade} value={grade}>
-                Grade {grade}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="control-group">
-          <span>Topic</span>
-          <select value={selectedTopic} onChange={(e) => setSelectedTopic(e.target.value)}>
-            <option value={ALL_TOPICS}>{ALL_TOPICS}</option>
-            {topicOptions.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <Practice
-        competition="NSML"
-        difficulty={null}
-        difficultyNative={selectedDiff === 'All' ? null : selectedDiff}
-        topic={null}
-        topics={effectiveTopics}
-        events={null}
-      />
-    </section>
-  )
-}
-
-// ---- ICTM (event + difficulty + per-event topics) -------------------------
-
-function IctmPage({ title, description }: { title: string; description: string }) {
-  // The bank stores level and event fused into one string ("Regional Algebra I");
-  // useIctmEvents splits them so they can be chosen separately.
-  const { levels, eventNames, resolve } = useIctmEvents()
-  const [level, setLevel] = useState(ALL_LEVELS)
-  const [eventName, setEventName] = useState(ALL_EVENTS)
-  const ictmDiffs = ['All', 'Easy', 'Medium', 'Hard']
-  const [selectedDiff, setSelectedDiff] = useState<string>('All')
-  const [selectedTopic, setSelectedTopic] = useState(ALL_TOPICS)
-
-  // Null when nothing is narrowed, so no event filter is sent at all.
-  const selectedEvents =
-    level === ALL_LEVELS && eventName === ALL_EVENTS ? null : resolve(level, eventName)
-  const teamRound = isTeamEvent(eventName)
-
-  return (
-    <section id="comp-page">
-      <h1>{title}</h1>
-      <p>{description}</p>
-
-      <div className="diff-buttons">
-        {ictmDiffs.map((d) => (
-          <button
-            key={d}
-            type="button"
-            className={`diff-button ${selectedDiff === d ? 'active' : ''}`}
-            onClick={() => setSelectedDiff(d)}
-          >
-            {d}
-          </button>
-        ))}
-      </div>
-
-      <div className="control-row">
-        <label className="control-group">
-          <span>Level</span>
-          <select value={level} onChange={(e) => setLevel(e.target.value)}>
-            <option value={ALL_LEVELS}>{ALL_LEVELS}</option>
-            {levels.map((l) => (
-              <option key={l} value={l}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="control-group">
-          <span>Event</span>
-          <select
-            value={eventName}
-            onChange={(e) => {
-              setEventName(e.target.value)
-              setSelectedTopic(ALL_TOPICS)
-            }}
-          >
-            <option value={ALL_EVENTS}>{ALL_EVENTS}</option>
-            {eventNames.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {/* Team rounds are scored as a whole round, so they have no topic split. */}
-        {!teamRound && (
-          <TopicSelect
-            competition="ICTM"
-            events={selectedEvents}
-            value={selectedTopic}
-            onChange={setSelectedTopic}
-          />
-        )}
-      </div>
-
-      <Practice
-        competition="ICTM"
-        difficulty={selectedDiff}
-        topic={teamRound ? null : selectedTopic}
-        events={selectedEvents}
-      />
     </section>
   )
 }
@@ -1046,8 +843,6 @@ function App() {
           <Link to="/comp-amc10" className="nav-button">AMC 10</Link>
           <Link to="/comp-amc12" className="nav-button">AMC 12</Link>
           <Link to="/comp-aime" className="nav-button">AIME</Link>
-          <Link to="/comp-nsml" className="nav-button">NSML</Link>
-          <Link to="/comp-ictm" className="nav-button">ICTM</Link>
         </nav>
 
         <div style={{ position: 'relative' }}>
@@ -1089,24 +884,7 @@ function App() {
                 />
               }
             />
-            <Route
-              path="/comp-nsml"
-              element={
-                <NsmlPage
-                  title="NSML"
-                  description="The North Suburban Math League is an Illinois‑based series of team and individual meets held throughout the school year that fosters collaborative problem‑solving across a wide range of mathematical topics."
-                />
-              }
-            />
-            <Route
-              path="/comp-ictm"
-              element={
-                <IctmPage
-                  title="ICTM"
-                  description="The Illinois Council of Teachers of Mathematics runs a large state‑wide competition with separate Frosh/Soph and Junior/Senior brackets, featuring both individual tests and team challenges to recognize excellence at every high‑school level."
-                />
-              }
-            />
+            <Route path="*" element={<section><h1>404</h1><p>Not Found</p></section>} />
           </Routes>
         </div>
       </div>

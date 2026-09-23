@@ -22,6 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import config
+import queries
 
 DEST = Path(__file__).resolve().parent.parent / "ictm-reader" / "public" / "images"
 
@@ -39,12 +40,22 @@ def main() -> int:
 
     DEST.mkdir(parents=True, exist_ok=True)
 
+    conn = queries.get_connection(config.DB_PATH)
+    try:
+        allowed = queries.public_image_paths(conn)
+    finally:
+        conn.close()
+    # Remove stale files too, so refreshing cannot retain removed material.
+    for staged in DEST.rglob("*"):
+        if staged.is_file() and staged.relative_to(DEST).as_posix() not in allowed:
+            staged.unlink()
+
     copied = skipped = 0
     total_bytes = 0
     # Recurse and mirror the tree: ICTM diagrams live in images/ictm/, and the
     # served URLs keep that subpath, so flattening here would break them.
     for f in sorted(src.rglob("*")):
-        if not f.is_file():
+        if not f.is_file() or f.relative_to(src).as_posix() not in allowed:
             continue
         target = DEST / f.relative_to(src)
         # Skip files already staged and unchanged, so repeat runs are cheap.

@@ -42,7 +42,7 @@ check("global topic counts sum to the approved total",
       sum(t["count"] for t in allt) == health,
       (sum(t["count"] for t in allt), health))
 
-for comp in ["AIME", "AMC10", "AMC12", "ICTM"]:
+for comp in ["AIME", "AMC10", "AMC12"]:
     topics = client.get(f"/api/topics?competition={comp}").get_json()
     check(f"{comp}: topics are scoped to the competition", all(t["count"] > 0 for t in topics), topics)
 
@@ -52,7 +52,7 @@ for comp in ["AIME", "AMC10", "AMC12", "ICTM"]:
     check(f"{comp}: has problems", total.status_code == 200, total.status_code)
 
 print("\n-- a selected topic actually constrains results --")
-for comp in ["AIME", "AMC10", "ICTM"]:
+for comp in ["AIME", "AMC10", "AMC12"]:
     topics = client.get(f"/api/topics?competition={comp}").get_json()
     for t in topics[:3]:
         seen = set()
@@ -69,100 +69,18 @@ for comp in ["AIME", "AMC10", "ICTM"]:
                 break
         check(f"{comp} / {t['name']}: every result carries the topic", ok)
 
-print("\n-- ICTM events are real values that return problems --")
-events = client.get("/api/events?competition=ICTM").get_json()
-check("event list is non-empty", len(events) > 0, events)
-check("events look Regional/State-prefixed",
-      all(e.startswith(("Regional", "State")) for e in events), events)
-
-for e in events:
-    r = client.get(f"/api/problems/random?competition=ICTM&event={e}")
-    got = r.get_json().get("event") if r.status_code == 200 else None
-    check(f"{e!r} returns a matching problem", r.status_code == 200 and got == e, f"{r.status_code} {got}")
-
-print("\n-- topic + event combine --")
-ev = events[0]
-for t in client.get(f"/api/topics?competition=ICTM&event={ev}").get_json():
-    r = client.get(f"/api/problems/random?competition=ICTM&event={ev}&topic={t['name']}")
-    body = r.get_json() if r.status_code == 200 else {}
-    check(
-        f"{ev!r} + {t['name']!r}",
-        r.status_code == 200 and body.get("event") == ev and t["name"] in body.get("topics", []),
-        f"{r.status_code}",
-    )
-
-print("\n-- level/event split: repeated event params --")
-# The UI offers Level and Event separately, so one choice ("Regional" + a round)
-# can cover several stored comp_event values. The API must accept them all.
-regional = [e for e in events if e.startswith("Regional")]
-qs = "&".join(f"event={e.replace(' ', '%20')}" for e in regional)
-r = client.get(f"/api/problems/random?competition=ICTM&{qs}")
-check("all Regional events at once returns a problem", r.status_code == 200, r.status_code)
-check("and it is a Regional one", r.get_json().get("event", "").startswith("Regional"),
-      r.get_json().get("event"))
-
-t = client.get(f"/api/topics?competition=ICTM&{qs}").get_json()
-check("topics scope to the whole Regional set", all(x["count"] > 0 for x in t), t)
-
-# 'Regional FS 8-Person' and 'Regional Frosh-Soph 8-Person Team' are the same
-# round under two ingestion names; the dropdown folds them into one option, so
-# selecting it must query both and reach the problems under the odd name.
-#
-# Counted rather than sampled: the odd name holds only ~9 of the pair's ~454
-# problems, so drawing random problems and hoping to see it is a coin flip.
-def topic_total(*evs):
-    qs2 = "&".join(f"event={e.replace(' ', '%20')}" for e in evs)
-    body = client.get(f"/api/topics?competition=ICTM&{qs2}").get_json()
-    return sum(t["count"] for t in body)
-
-
-pair = ["Regional FS 8-Person", "Regional Frosh-Soph 8-Person Team"]
-if all(p in events for p in pair):
-    a, b = topic_total(pair[0]), topic_total(pair[1])
-    both = topic_total(*pair)
-    check("each name in the aliased pair has problems", a > 0 and b > 0, (a, b))
-    check("querying the pair covers both, not just one", both == a + b, (a, b, both))
-
 print("\n-- a topic with no problems is never offered --")
 r = client.get("/api/problems/random?competition=AIME&topic=Relay%20Practice")
 check("a made-up topic yields 404, not a random problem", r.status_code == 404, r.status_code)
 offered = {t["name"] for t in client.get("/api/topics?competition=AIME").get_json()}
 check("made-up topic is absent from the options", "Relay Practice" not in offered)
 
-print("\n-- NSML grade mapping: exact Q filter + grade topics --")
-CANONICAL_NSML = {
-    "Number Bases", "Counting Basics", "Basic Statistics", "Applications of Linear Systems",
-    "Logic / Sets / Venn Diagrams", "Geometric Probability", "Circles",
-    "Surface Area and Volume (3D)",
-    "Modular Arithmetic", "Probability", "Geometric Transformations Using Matrices on a Plane",
-    "Theory of Polynomials",
-    "Diophantine Equations", "Vectors", "Parametric Equations",
-}
-nsml_topics = {t["name"] for t in client.get("/api/topics?competition=NSML").get_json()}
-check("NSML topics are the canonical nsml.org set", nsml_topics == CANONICAL_NSML, nsml_topics)
-
-# "Q3" must mean Q3, not the whole medium tier (Q3+Q4).
-r = client.get("/api/problems/random?competition=NSML&difficulty_native=Q3")
-check("exact native difficulty filters to that question", r.status_code == 200, r.status_code)
-if r.status_code == 200:
-    row = queries.get_problem_by_id(conn, r.get_json()["problem_id"])
-    check("native Q3 problem is actually Q3", row["comp_difficulty"] == "Q3", row["comp_difficulty"])
-
-# A grade maps to a set of topics (the UI sends them all as repeated params).
-for topics in [
-    ["Number Bases", "Counting Basics", "Basic Statistics", "Applications of Linear Systems"],
-    ["Logic / Sets / Venn Diagrams", "Geometric Probability", "Circles",
-     "Surface Area and Volume (3D)"],
-    ["Modular Arithmetic", "Probability", "Geometric Transformations Using Matrices on a Plane",
-     "Theory of Polynomials"],
-    ["Diophantine Equations", "Probability", "Vectors", "Parametric Equations"],
-]:
-    qs = "&".join(f"topic={t.replace(' ', '%20')}" for t in topics)
-    r = client.get(f"/api/problems/random?competition=NSML&{qs}")
-    check(f"grade topics {topics[0]}.. return problems", r.status_code == 200, r.status_code)
-    if r.status_code == 200:
-        body = r.get_json()
-        check("returned problem belongs to the grade", body["topics"][0] in topics, body["topics"])
+print("\n-- removed competitions are unavailable --")
+for comp in ["ICTM", "NSML"]:
+    check(f"{comp}: no random problems", client.get(f"/api/problems/random?competition={comp}").status_code == 404)
+    check(f"{comp}: no topics", client.get(f"/api/topics?competition={comp}").get_json() == [])
+    check(f"{comp}: no events", client.get(f"/api/events?competition={comp}").get_json() == [])
+    check(f"{comp}: no years", client.get(f"/api/years?competition={comp}").get_json() == {"min": None, "max": None})
 
 print()
 if failures:

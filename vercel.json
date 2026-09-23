@@ -7,7 +7,8 @@
       "maxDuration": 30
     }
   },
-  "routes": [
-    { "src": "/(.*)", "dest": "/index.html", "status": 404, "headers": { "Cache-Control": "no-store" } }
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

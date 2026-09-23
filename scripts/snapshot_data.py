@@ -30,6 +30,27 @@ ROOT = Path(__file__).resolve().parent.parent
 DEST_DB = ROOT / "data" / "problems.db"
 
 
+def remove_unavailable(conn: sqlite3.Connection) -> None:
+    """Exclude removed competitions from the deployable snapshot."""
+    conn.executescript("""
+        DELETE FROM mock_problems WHERE mock_id IN (
+            SELECT mock_id FROM mocks JOIN competitions USING (competition_id)
+            WHERE short_name IN ('ICTM', 'NSML'));
+        DELETE FROM mock_problems WHERE problem_id IN (
+            SELECT problem_id FROM problems JOIN competitions USING (competition_id)
+            WHERE short_name IN ('ICTM', 'NSML'));
+        DELETE FROM problem_topics WHERE problem_id IN (
+            SELECT problem_id FROM problems JOIN competitions USING (competition_id)
+            WHERE short_name IN ('ICTM', 'NSML'));
+        DELETE FROM mocks WHERE competition_id IN (
+            SELECT competition_id FROM competitions WHERE short_name IN ('ICTM', 'NSML'));
+        DELETE FROM problems WHERE competition_id IN (
+            SELECT competition_id FROM competitions WHERE short_name IN ('ICTM', 'NSML'));
+        DELETE FROM competitions WHERE short_name IN ('ICTM', 'NSML');
+    """)
+    conn.execute("VACUUM")
+
+
 def snapshot_db() -> int:
     src = config.DB_PATH
     if not src.exists():
@@ -47,6 +68,7 @@ def snapshot_db() -> int:
     dest = sqlite3.connect(DEST_DB)
     try:
         source.backup(dest)
+        remove_unavailable(dest)
     finally:
         dest.close()
         source.close()
