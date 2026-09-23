@@ -9,7 +9,7 @@ diagram images. Difficulty is normalized to easy/medium/hard (see difficulty.py)
 Run:  flask --app app run   (or: python app.py)
 """
 
-from flask import Flask, g, jsonify, request, send_from_directory
+from flask import Flask, abort, g, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 import config
@@ -26,6 +26,10 @@ def create_app() -> Flask:
     app = Flask(__name__)
     # The frontend is served from a different origin in dev (Vite on :5173).
     CORS(app, resources={r"/api/*": {"origins": "*"}})
+
+    @app.before_request
+    def unavailable():
+        abort(404)
 
     def get_db():
         if "db" not in g:
