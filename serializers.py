@@ -19,7 +19,7 @@ from equivalence import answers_equal
 from queries import get_topics_for_problem
 
 
-def _image_url(image_path: str | None) -> str | None:
+def _image_url(image_path: str | None, competition: str | None = None) -> str | None:
     """DB image_path ('images/AMC10A_2023_11.png') -> served URL, or None.
 
     Keeps any subdirectory below the bank's images/ root — the ICTM images live
@@ -34,7 +34,8 @@ def _image_url(image_path: str | None) -> str | None:
     rel = PurePosixPath(image_path.replace("\\", "/"))
     if rel.parts and rel.parts[0] == "images":
         rel = PurePosixPath(*rel.parts[1:])
-    return f"{config.IMAGE_BASE_URL}/{rel}"
+    base = "/api/images" if competition in {"ICTM", "NSML"} else config.IMAGE_BASE_URL
+    return f"{base}/{rel}"
 
 
 # Choices are static per problem and parsed on every read (serialize + check),
@@ -62,7 +63,7 @@ def serialize_problem(
         "answer_format": row["answer_format"],
         "problem_text": row["problem_text"],
         "choices": _choices(row["choices_json"]),
-        "image_url": _image_url(row["image_path"]),
+        "image_url": _image_url(row["image_path"], row["competition"]),
         "event": row["comp_event"],
         "year": row["comp_year"],
         "problem_number": row["comp_problem_number"],

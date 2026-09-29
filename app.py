@@ -14,6 +14,7 @@ from flask_cors import CORS
 
 import config
 import queries
+from competition_access import install_access, unlocked_competitions
 from serializers import serialize_problem, check_answer
 
 # Stats/accounts are optional: see stats.get_client(), which returns None when
@@ -24,12 +25,13 @@ from stats import record_attempt, get_summary, set_attempt_correct
 
 def create_app() -> Flask:
     app = Flask(__name__)
+    install_access(app)
     # The frontend is served from a different origin in dev (Vite on :5173).
     CORS(app, resources={r"/api/*": {"origins": "*"}})
 
     def get_db():
         if "db" not in g:
-            g.db = queries.get_connection(config.DB_PATH)
+            g.db = queries.get_connection(config.DB_PATH, unlocked_competitions())
         return g.db
 
     @app.teardown_appcontext
@@ -174,10 +176,12 @@ def create_app() -> Flask:
 
     @app.get("/api/images/<path:filename>")
     def image(filename):
-        if filename not in queries.public_image_paths(get_db()):
+        if filename not in queries.accessible_image_paths(get_db()):
             abort(404)
         # send_from_directory rejects path-traversal attempts.
-        return send_from_directory(config.IMAGES_DIR, filename)
+        if (config.IMAGES_DIR / filename).is_file():
+            return send_from_directory(config.IMAGES_DIR, filename)
+        return send_from_directory(config.PRIVATE_IMAGES_DIR, filename)
 
     # ---- User Stats ---------------------------------------------------------
 

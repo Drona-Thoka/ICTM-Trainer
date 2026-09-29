@@ -49,13 +49,17 @@ def _cache_put(key: tuple, value: object) -> None:
     _cache[key] = (time.monotonic() + _CACHE_TTL_S, value)
 
 
-def get_connection(db_path: Path) -> sqlite3.Connection:
+def get_connection(db_path: Path, unlocked: tuple[str, ...] = ()) -> sqlite3.Connection:
     """Open problems.db read-only. Fails loudly if the file is missing."""
     if not Path(db_path).exists():
         raise FileNotFoundError(f"Problem bank database not found at {db_path}")
     uri = f"file:{Path(db_path).as_posix()}?mode=ro"
     conn = sqlite3.connect(uri, uri=True, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    allowed = frozenset(unlocked)
+    conn.create_function("competition_allowed", 1, lambda name: int(name not in {"ICTM", "NSML"} or name in allowed))
+    scope = str(Path(db_path).resolve()) + ":" + ",".join(sorted(allowed))
+    conn.create_function("access_scope", 0, lambda: scope)
     # The bank is written concurrently by the ingestion pipeline in rollback-journal
     # mode, where a read can briefly collide with a writer's commit. Wait out the
     # lock instead of failing the request with "database is locked".
@@ -65,14 +69,14 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
 
 def count_approved(conn: sqlite3.Connection) -> int:
     row = conn.execute(
-        "SELECT COUNT(*) AS n FROM problems p JOIN competitions c USING (competition_id) WHERE p.review_status = 'approved' AND c.short_name NOT IN ('ICTM', 'NSML')"
+        "SELECT COUNT(*) AS n FROM problems p JOIN competitions c USING (competition_id) WHERE p.review_status = 'approved' AND competition_allowed(c.short_name) = 1"
     ).fetchone()
     return row["n"]
 
 
 def list_competitions(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     return conn.execute(
-        "SELECT short_name, name, answer_format FROM competitions WHERE short_name NOT IN ('ICTM', 'NSML') ORDER BY short_name"
+        "SELECT short_name, name, answer_format FROM competitions WHERE competition_allowed(short_name) = 1 ORDER BY short_name"
     ).fetchall()
 
 
@@ -111,12 +115,12 @@ def list_topics(
     table alone offers filters that silently match nothing. Narrowing by
     competition/event keeps each page's options honest.
     """
-    clauses = ["p.review_status = 'approved'", "c.short_name NOT IN ('ICTM', 'NSML')"]
+    clauses = ["p.review_status = 'approved'", "competition_allowed(c.short_name) = 1"]
     params: list = []
 
     # The frontend refetches this on every filter change / page mount; the
     # underlying data only moves with ingestion, so cache briefly.
-    key = ("topics", competition, tuple(event) if event else None)
+    key = (conn.execute("SELECT access_scope()").fetchone()[0], "topics", competition, tuple(event) if event else None)
     cached = _cache_get(key)
     if cached is not None:
         return cached
@@ -157,7 +161,7 @@ def list_events(conn: sqlite3.Connection, competition: str) -> list[str]:
         SELECT DISTINCT p.comp_event
         FROM problems p
         JOIN competitions c ON c.competition_id = p.competition_id
-        WHERE c.short_name = ? AND c.short_name NOT IN ('ICTM', 'NSML')
+        WHERE c.short_name = ? AND competition_allowed(c.short_name) = 1
           AND p.review_status = 'approved'
           AND p.comp_event IS NOT NULL
         ORDER BY p.comp_event
@@ -177,7 +181,7 @@ def year_bounds(conn: sqlite3.Connection, competition: str) -> dict:
         SELECT MIN(p.comp_year) AS min_year, MAX(p.comp_year) AS max_year
         FROM problems p
         JOIN competitions c ON c.competition_id = p.competition_id
-        WHERE c.short_name = ? AND c.short_name NOT IN ('ICTM', 'NSML')
+        WHERE c.short_name = ? AND competition_allowed(c.short_name) = 1
           AND p.review_status = 'approved'
           AND p.comp_year IS NOT NULL
         """,
@@ -206,7 +210,7 @@ def _build_filters(
     several native labels into one tier. When both are given, the exact label
     wins.
     """
-    clauses = ["p.review_status = 'approved'", "c.short_name NOT IN ('ICTM', 'NSML')"]
+    clauses = ["p.review_status = 'approved'", "competition_allowed(c.short_name) = 1"]
     params: list = []
     needs_topic_join = False
 
@@ -284,7 +288,7 @@ def get_random_problem(
         {_topic_join(needs_topic_join)}
         WHERE {where}
     """
-    key = (where, tuple(params), needs_topic_join)
+    key = (conn.execute("SELECT access_scope()").fetchone()[0], where, tuple(params), needs_topic_join)
     ids = _cache_get(key)
     if ids is None:
         ids = tuple(
@@ -304,7 +308,7 @@ def get_problem_by_id(conn: sqlite3.Connection, problem_id: int) -> sqlite3.Row 
         FROM problems p
         JOIN competitions c ON c.competition_id = p.competition_id
         WHERE p.problem_id = ? AND p.review_status = 'approved'
-          AND c.short_name NOT IN ('ICTM', 'NSML')
+          AND competition_allowed(c.short_name) = 1
     """
     return conn.execute(sql, (problem_id,)).fetchone()
 
@@ -330,5 +334,13 @@ def public_image_paths(conn: sqlite3.Connection) -> set[str]:
         JOIN competitions c USING (competition_id)
         WHERE c.short_name NOT IN ('ICTM', 'NSML')
           AND p.image_path IS NOT NULL
+    """)
+    return {row[0].replace("\\", "/").removeprefix("images/") for row in rows}
+
+
+def accessible_image_paths(conn: sqlite3.Connection) -> set[str]:
+    rows = conn.execute("""
+        SELECT p.image_path FROM problems p JOIN competitions c USING (competition_id)
+        WHERE competition_allowed(c.short_name) = 1 AND p.image_path IS NOT NULL
     """)
     return {row[0].replace("\\", "/").removeprefix("images/") for row in rows}

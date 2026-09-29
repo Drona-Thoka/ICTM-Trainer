@@ -5,7 +5,8 @@ The bank is a separate git repo one level up, so a Vercel build never sees it.
 This takes a point-in-time snapshot into files that ARE committed here:
 
     data/problems.db              <- the bank's SQLite database
-    ictm-reader/public/images/    <- diagram images, served statically by the CDN
+    ictm-reader/public/images/    <- public competition diagrams, served by the CDN
+    data/private-images/         <- protected diagrams, served only by the API
 
 Run this whenever you want the deployed site to pick up newly ingested problems,
 then commit the result:
@@ -30,27 +31,6 @@ ROOT = Path(__file__).resolve().parent.parent
 DEST_DB = ROOT / "data" / "problems.db"
 
 
-def remove_unavailable(conn: sqlite3.Connection) -> None:
-    """Exclude removed competitions from the deployable snapshot."""
-    conn.executescript("""
-        DELETE FROM mock_problems WHERE mock_id IN (
-            SELECT mock_id FROM mocks JOIN competitions USING (competition_id)
-            WHERE short_name IN ('ICTM', 'NSML'));
-        DELETE FROM mock_problems WHERE problem_id IN (
-            SELECT problem_id FROM problems JOIN competitions USING (competition_id)
-            WHERE short_name IN ('ICTM', 'NSML'));
-        DELETE FROM problem_topics WHERE problem_id IN (
-            SELECT problem_id FROM problems JOIN competitions USING (competition_id)
-            WHERE short_name IN ('ICTM', 'NSML'));
-        DELETE FROM mocks WHERE competition_id IN (
-            SELECT competition_id FROM competitions WHERE short_name IN ('ICTM', 'NSML'));
-        DELETE FROM problems WHERE competition_id IN (
-            SELECT competition_id FROM competitions WHERE short_name IN ('ICTM', 'NSML'));
-        DELETE FROM competitions WHERE short_name IN ('ICTM', 'NSML');
-    """)
-    conn.execute("VACUUM")
-
-
 def snapshot_db() -> int:
     src = config.DB_PATH
     if not src.exists():
@@ -68,7 +48,6 @@ def snapshot_db() -> int:
     dest = sqlite3.connect(DEST_DB)
     try:
         source.backup(dest)
-        remove_unavailable(dest)
     finally:
         dest.close()
         source.close()

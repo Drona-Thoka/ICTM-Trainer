@@ -63,3 +63,6 @@ IMAGES_DIR = _resolve(
 # the frontend build (scripts/stage_images.py) so the CDN serves them directly —
 # 938 immutable files have no business costing a Python invocation each.
 IMAGE_BASE_URL = os.environ.get("IMAGE_BASE_URL", "/api/images").rstrip("/")
+
+# Server-only diagrams; never copied into the frontend public directory.
+PRIVATE_IMAGES_DIR = _BASE_DIR / "data" / "private-images"

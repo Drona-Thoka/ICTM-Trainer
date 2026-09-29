@@ -75,7 +75,7 @@ check("a made-up topic yields 404, not a random problem", r.status_code == 404, 
 offered = {t["name"] for t in client.get("/api/topics?competition=AIME").get_json()}
 check("made-up topic is absent from the options", "Relay Practice" not in offered)
 
-print("\n-- removed competitions are unavailable --")
+print("\n-- password-protected competitions are locked by default --")
 for comp in ["ICTM", "NSML"]:
     check(f"{comp}: no random problems", client.get(f"/api/problems/random?competition={comp}").status_code == 404)
     check(f"{comp}: no topics", client.get(f"/api/topics?competition={comp}").get_json() == [])
